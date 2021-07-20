@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 
 import { injectable } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
@@ -14,12 +14,16 @@ import { GraphQLService, SqlDialectInfo } from '@cloudbeaver/core-sdk';
 
 @injectable()
 export class SqlDialectInfoService {
-  @observable private dialectInfo = new Map<string, SqlDialectInfo>();
+  private dialectInfo = new Map<string, SqlDialectInfo>();
 
   constructor(
     private graphQLService: GraphQLService,
     private notificationService: NotificationService
-  ) { }
+  ) {
+    makeObservable<SqlDialectInfoService, 'dialectInfo'>(this, {
+      dialectInfo: observable,
+    });
+  }
 
   getDialectInfo(connectionId: string): SqlDialectInfo | undefined {
     return this.dialectInfo.get(connectionId);

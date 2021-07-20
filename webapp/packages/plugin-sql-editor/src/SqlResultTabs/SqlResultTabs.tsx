@@ -1,33 +1,35 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
 import { computed } from 'mobx';
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import { useMemo } from 'react';
 import styled, { css } from 'reshadow';
 
-import { ITab as TabClass } from '@cloudbeaver/core-app';
+import type { ITab as TabClass } from '@cloudbeaver/core-app';
 import {
-  Tab, TabPanel, TabTitle, TabsBox, TextPlaceholder, Loader, ITabData
+  Tab, TabPanel, TabTitle, TabsBox, TextPlaceholder, ITabData, TabIcon
 } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { useTranslate } from '@cloudbeaver/core-localization';
 import { useStyles, composes } from '@cloudbeaver/core-theming';
 
-import { ISqlEditorTabState } from '../ISqlEditorTabState';
+import type { ISqlEditorTabState } from '../ISqlEditorTabState';
 import { SqlEditorNavigatorService } from '../SqlEditorNavigatorService';
-import { SqlResultPanel } from './SqlResultPanel/SqlResultPanel';
-import { SqlResultTabsService } from './SqlResultTabsService';
+import { SqlResultPanel } from './SqlResultPanel';
 
 const styles = composes(
   css`
     Tab {
       composes: theme-ripple theme-background-surface theme-text-text-primary-on-light from global;
+    }
+    TabIcon {
+      composes: theme-text-surface from global;
     }
     tabs {
       composes: theme-background-background theme-text-text-primary-on-light from global;
@@ -35,6 +37,7 @@ const styles = composes(
   `,
   css`
     wrapper {
+      overflow: auto;
       display: flex;
       flex: 1;
       height: 100%;
@@ -54,60 +57,52 @@ export const SqlResultTabs = observer(function SqlDataResult({ tab }: SqlDataRes
   const style = useStyles(styles);
   const translate = useTranslate();
   const navigatorService = useService(SqlEditorNavigatorService);
-  const sqlResultTabsService = useService(SqlResultTabsService);
 
   const orderedTabs = useMemo(
     () => computed(
-      () => tab.handlerState.resultTabs
+      () => tab.handlerState.tabs
         .slice()
         .sort((tabA, tabB) => {
-          if (tabA.groupId === tabB.groupId) {
-            return tabA.order - tabB.order;
+          const resultTabA = tab.handlerState.resultTabs.find(tab => tab.tabId === tabA.id);
+          const resultTabB = tab.handlerState.resultTabs.find(tab => tab.tabId === tabB.id);
+
+          if (resultTabA && resultTabB && tabA.order === tabB.order) {
+            return resultTabA.indexInResultSet - resultTabB.indexInResultSet;
           }
 
-          const groupA = tab.handlerState.queryTabGroups.find(group => group.groupId === tabA.groupId)!;
-          const groupB = tab.handlerState.queryTabGroups.find(group => group.groupId === tabB.groupId)!;
-
-          return groupA.order - groupB.order;
+          return tabA.order - tabB.order;
         })
     ),
     [tab]
-  );
+  ).get();
 
   const handleOpen = ({ tabId }: ITabData<any>) => navigatorService.openEditorResult(tab.id, tabId);
   const handleClose = ({ tabId }: ITabData<any>) => navigatorService.closeEditorResult(tab.id, tabId);
 
-  if (!tab.handlerState.queryTabGroups.length) {
+  if (!tab.handlerState.tabs.length) {
     return <TextPlaceholder>{translate('sql_editor_placeholder')}</TextPlaceholder>;
   }
 
-  const currentId = tab.handlerState.currentResultTabId || '';
-
-  const executionState = sqlResultTabsService.getTabExecutionContext(tab.id);
+  const currentId = tab.handlerState.currentTabId || '';
 
   return styled(style)(
-    <wrapper as="div">
+    <wrapper>
       <TabsBox
         currentTabId={currentId}
-        tabs={orderedTabs.get().map(result => (
-          <Tab key={result.resultTabId} tabId={result.resultTabId} onOpen={handleOpen} onClose={handleClose}>
+        tabs={orderedTabs.map(result => (
+          <Tab key={result.id} tabId={result.id} onOpen={handleOpen} onClose={handleClose}>
+            <TabIcon icon={result.icon} />
             <TabTitle>{result.name}</TabTitle>
           </Tab>
         ))}
         style={[styles]}
       >
-        {orderedTabs.get().map(result => (
-          <TabPanel key={result.resultTabId} tabId={result.resultTabId}>
-            <SqlResultPanel tab={tab} panelInit={result} />
+        {orderedTabs.map(result => (
+          <TabPanel key={result.id} tabId={result.id}>
+            <SqlResultPanel tab={tab} id={result.id} />
           </TabPanel>
         ))}
       </TabsBox>
-      <Loader
-        loading={executionState.isSqlExecuting}
-        cancelDisabled={!executionState.canCancel}
-        overlay
-        onCancel={executionState.cancelSQlExecuting}
-      />
     </wrapper>
   );
 });

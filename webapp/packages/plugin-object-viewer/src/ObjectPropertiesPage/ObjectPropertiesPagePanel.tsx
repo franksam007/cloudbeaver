@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import styled, { css } from 'reshadow';
 
 import { useChildren } from '@cloudbeaver/core-app';
@@ -14,7 +14,7 @@ import { Loader, TextPlaceholder } from '@cloudbeaver/core-blocks';
 import { Translate } from '@cloudbeaver/core-localization';
 import { useStyles, composes } from '@cloudbeaver/core-theming';
 
-import { ObjectPagePanelProps } from '../ObjectPage/ObjectPage';
+import type { ObjectPagePanelProps } from '../ObjectPage/ObjectPage';
 import { ObjectFolders } from './ObjectFolders';
 
 const viewerStyles = composes(
@@ -48,7 +48,7 @@ export const ObjectPropertiesPagePanel = observer(function ObjectPropertiesPageP
   }
 
   return styled(style)(
-    <wrapper as="div">
+    <wrapper>
       <ObjectFolders tab={tab} />
     </wrapper>
   );

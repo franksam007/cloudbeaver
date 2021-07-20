@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import org.jkiss.dbeaver.model.data.json.JSONUtils;
 import org.jkiss.dbeaver.model.meta.Property;
 import org.jkiss.utils.CommonUtils;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -49,38 +51,49 @@ public class WebConnectionConfig {
     private String authModelId;
     private Map<String, Object> credentials;
     private boolean saveCredentials;
+    private Map<String, Object> providerProperties;
+    private List<WebNetworkHandlerConfigInput> networkHandlersConfig;
 
     public WebConnectionConfig() {
     }
 
     public WebConnectionConfig(Map<String, Object> params) {
-        connectionId = JSONUtils.getString(params, "connectionId");
-        templateId = JSONUtils.getString(params, "templateId");
-        String dataSourceId = JSONUtils.getString(params, "dataSourceId");
-        if (CommonUtils.isEmpty(templateId) && !CommonUtils.isEmpty(dataSourceId)) {
-            templateId = dataSourceId;
+        if (!CommonUtils.isEmpty(params)) {
+            connectionId = JSONUtils.getString(params, "connectionId");
+            templateId = JSONUtils.getString(params, "templateId");
+            String dataSourceId = JSONUtils.getString(params, "dataSourceId");
+            if (CommonUtils.isEmpty(templateId) && !CommonUtils.isEmpty(dataSourceId)) {
+                templateId = dataSourceId;
+            }
+            driverId = JSONUtils.getString(params, "driverId");
+
+            template = JSONUtils.getBoolean(params, "template");
+            readOnly = JSONUtils.getBoolean(params, "readOnly");
+
+            host = JSONUtils.getString(params, "host");
+            port = JSONUtils.getString(params, "port");
+            serverName = JSONUtils.getString(params, "serverName");
+            databaseName = JSONUtils.getString(params, "databaseName");
+            url = JSONUtils.getString(params, "url");
+
+            name = JSONUtils.getString(params, "name");
+            description = JSONUtils.getString(params, "description");
+
+            properties = JSONUtils.getObjectOrNull(params, "properties");
+            userName = JSONUtils.getString(params, "userName");
+            userPassword = JSONUtils.getString(params, "userPassword");
+
+            authModelId = JSONUtils.getString(params, "authModelId");
+            credentials = JSONUtils.getObjectOrNull(params, "credentials");
+            saveCredentials = JSONUtils.getBoolean(params, "saveCredentials");
+
+            providerProperties = JSONUtils.getObjectOrNull(params, "providerProperties");
+
+            networkHandlersConfig = new ArrayList<>();
+            for (Map<String, Object> nhc : JSONUtils.getObjectList(params, "networkHandlersConfig")) {
+                networkHandlersConfig.add(new WebNetworkHandlerConfigInput(nhc));
+            }
         }
-        driverId = JSONUtils.getString(params, "driverId");
-
-        template = JSONUtils.getBoolean(params, "template");
-        readOnly = JSONUtils.getBoolean(params, "readOnly");
-
-        host = JSONUtils.getString(params, "host");
-        port = JSONUtils.getString(params, "port");
-        serverName = JSONUtils.getString(params, "serverName");
-        databaseName = JSONUtils.getString(params, "databaseName");
-        url = JSONUtils.getString(params, "url");
-
-        name = JSONUtils.getString(params, "name");
-        description = JSONUtils.getString(params, "description");
-
-        properties = JSONUtils.getObjectOrNull(params, "properties");
-        userName = JSONUtils.getString(params, "userName");
-        userPassword = JSONUtils.getString(params, "userPassword");
-
-        authModelId = JSONUtils.getString(params, "authModelId");
-        credentials = JSONUtils.getObjectOrNull(params, "credentials");
-        saveCredentials = JSONUtils.getBoolean(params, "saveCredentials");
     }
 
     @Property
@@ -168,6 +181,10 @@ public class WebConnectionConfig {
         return credentials;
     }
 
+    public List<WebNetworkHandlerConfigInput> getNetworkHandlersConfig() {
+        return networkHandlersConfig;
+    }
+
     @Property
     public boolean isSaveCredentials() {
         return saveCredentials;
@@ -177,4 +194,8 @@ public class WebConnectionConfig {
         this.saveCredentials = saveCredentials;
     }
 
+    @Property
+    public Map<String, Object> getProviderProperties() {
+        return providerProperties;
+    }
 }

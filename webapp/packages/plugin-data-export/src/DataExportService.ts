@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,12 +8,12 @@
 
 import { injectable } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
-import { DataTransferParameters } from '@cloudbeaver/core-sdk';
+import type { DataTransferParameters } from '@cloudbeaver/core-sdk';
 
 import { DataExportProcessService } from './DataExportProcessService';
 import { DataTransferProcessorsResource } from './DataTransferProcessorsResource';
 import { ExportNotification } from './ExportNotification/ExportNotification';
-import { IExportContext } from './IExportContext';
+import type { IExportContext } from './IExportContext';
 
 @injectable()
 export class DataExportService {

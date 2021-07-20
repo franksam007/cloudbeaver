@@ -1,26 +1,25 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 
 import { AdministrationScreenService } from '@cloudbeaver/core-administration';
 import { injectable } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
-import { AdminConnectionSearchInfo } from '@cloudbeaver/core-sdk';
-import { uuid } from '@cloudbeaver/core-utils';
+import type { AdminConnectionSearchInfo } from '@cloudbeaver/core-sdk';
 
-import { AdminConnection, ConnectionsResource } from '../../../ConnectionsResource';
+import { ConnectionsResource } from '../../../ConnectionsResource';
 import { CreateConnectionService } from '../../CreateConnectionService';
 
 @injectable()
 export class ConnectionSearchService {
-  @observable hosts = 'localhost';
-  @observable databases: AdminConnectionSearchInfo[];
+  hosts = 'localhost';
+  databases: AdminConnectionSearchInfo[];
 
   get disabled(): boolean {
     return this.createConnectionService.disabled;
@@ -36,6 +35,11 @@ export class ConnectionSearchService {
     private createConnectionService: CreateConnectionService,
     private administrationScreenService: AdministrationScreenService
   ) {
+    makeObservable(this, {
+      hosts: observable,
+      databases: observable,
+    });
+
     this.databases = [];
     this.search = this.search.bind(this);
     this.change = this.change.bind(this);
@@ -48,7 +52,7 @@ export class ConnectionSearchService {
   }
 
   async load(): Promise<void> {
-    if (this.administrationScreenService.isConfigurationMode) {
+    if (this.administrationScreenService.isConfigurationMode && this.databases.length === 0) {
       await this.search();
     }
   }
@@ -81,7 +85,7 @@ export class ConnectionSearchService {
   select(database: AdminConnectionSearchInfo): void {
     this.createConnectionService.setConnectionTemplate(
       {
-        ...this.connectionsResource.getEmptyConnection(),
+        ...this.connectionsResource.getEmptyConfig(),
         driverId: database.defaultDriver,
         host: database.host,
         port: `${database.port}`,

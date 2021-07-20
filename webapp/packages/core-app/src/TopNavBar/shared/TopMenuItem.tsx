@@ -1,13 +1,13 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
-import { ButtonHTMLAttributes } from 'react';
+import { observer } from 'mobx-react-lite';
+import type { ButtonHTMLAttributes } from 'react';
 import styled from 'reshadow';
 
 import { Icon, IconOrImage } from '@cloudbeaver/core-blocks';
@@ -25,7 +25,8 @@ type TopMenuItemProps = Omit<ButtonHTMLAttributes<any>, 'style'> & {
 
 export const TopMenuItem = observer(function TopMenuItem({ menuItem, style = [], ...props }: TopMenuItemProps) {
   const translate = useTranslate();
-  const styles = useStyles(!menuItem.panel ? [] : [...style, topMenuStyles]);
+  style = [...style, topMenuStyles];
+  const styles = useStyles(!menuItem.panel ? [] : style);
 
   if (!menuItem.panel) {
     return (
@@ -44,12 +45,13 @@ export const TopMenuItem = observer(function TopMenuItem({ menuItem, style = [],
       {...props}
       panel={menuItem.panel}
       disabled={menuItem.isDisabled}
-      style={[...style, topMenuStyles]}
+      style={style}
       placement="bottom-end"
+      modal
       onClick={() => menuItem.onClick?.()}
     >
       {menuItem.icon && (
-        <menu-trigger-icon as="div">
+        <menu-trigger-icon>
           <IconOrImage icon={menuItem.icon} />
         </menu-trigger-icon>
       )}

@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@ import {
   GraphQLService, CachedMapResource, ResourceKey, isResourceKeyList
 } from '@cloudbeaver/core-sdk';
 
-import { DBObject } from './EntityTypes';
+import type { DBObject } from './EntityTypes';
 import { NavNodeInfoResource } from './NavNodeInfoResource';
 
 @injectable()
@@ -20,7 +20,7 @@ export class DBObjectService extends CachedMapResource<string, DBObject> {
     private graphQLService: GraphQLService,
     private navNodeInfoResource: NavNodeInfoResource
   ) {
-    super(new Map());
+    super();
     this.navNodeInfoResource.onDataOutdated.addHandler(this.markOutdated.bind(this));
     this.navNodeInfoResource.onItemDelete.addHandler(this.delete.bind(this));
   }
@@ -28,6 +28,7 @@ export class DBObjectService extends CachedMapResource<string, DBObject> {
   async loadChildren(parentId: string, key: ResourceKey<string>): Promise<Map<string, DBObject>> {
     await this.performUpdate(
       key,
+      [],
       () => this.loadFromChildren(parentId),
       () => this.isLoaded(key) && !this.isOutdated(key)
     );

@@ -1,20 +1,22 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { computed, observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 
 import { AdministrationScreenService } from '@cloudbeaver/core-administration';
 import { TabsContainer } from '@cloudbeaver/core-blocks';
 import { injectable } from '@cloudbeaver/core-di';
-import { AdminConnectionGrantInfo } from '@cloudbeaver/core-sdk';
+import type { ConnectionConfig } from '@cloudbeaver/core-sdk';
 
-import { DBDriver, DBDriverResource } from '../../DBDriverResource';
-import { AdminConnection } from '../ConnectionsResource';
+import { ConnectionFormService } from '../../ConnectionForm/ConnectionFormService';
+import { ConnectionFormState } from '../../ConnectionForm/ConnectionFormState';
+import type { IConnectionFormState } from '../../ConnectionForm/IConnectionFormProps';
+import { ConnectionsResource } from '../ConnectionsResource';
 import { ConnectionsAdministrationNavService } from './ConnectionsAdministrationNavService';
 
 export interface ICreateMethodOptions {
@@ -26,31 +28,23 @@ export interface ICreateMethodOptions {
 
 @injectable()
 export class CreateConnectionService {
-  @observable disabled = false;
-  @observable connection: AdminConnection | null;
-  @observable availableDrivers: string[];
-  @observable credentials: Record<string, string | number>;
-  @observable grantedSubjects: AdminConnectionGrantInfo[] | null;
+  disabled = false;
+  data: IConnectionFormState | null;
 
-  @computed get driver(): DBDriver | undefined {
-    if (!this.connection?.driverId) {
-      return;
-    }
-
-    return this.dbDriverResource.get(this.connection.driverId);
-  }
-
-  readonly tabsContainer: TabsContainer<any, ICreateMethodOptions>;
+  readonly tabsContainer: TabsContainer<void, ICreateMethodOptions>;
 
   constructor(
-    private readonly dbDriverResource: DBDriverResource,
     private readonly connectionsAdministrationNavService: ConnectionsAdministrationNavService,
-    private readonly administrationScreenService: AdministrationScreenService
+    private readonly administrationScreenService: AdministrationScreenService,
+    private readonly connectionFormService: ConnectionFormService,
+    private readonly connectionsResource: ConnectionsResource
   ) {
-    this.credentials = {};
-    this.availableDrivers = [];
-    this.grantedSubjects = null;
-    this.connection = null;
+    makeObservable(this, {
+      data: observable,
+      disabled: observable,
+    });
+
+    this.data = null;
     this.tabsContainer = new TabsContainer();
 
     this.setConnectionTemplate = this.setConnectionTemplate.bind(this);
@@ -61,11 +55,14 @@ export class CreateConnectionService {
   }
 
   getDefault(): string | null {
-    if (this.tabsContainer.tabInfoList.length === 0) {
+    const tabs = this.tabsContainer.getDisplayed();
+
+    if (tabs.length === 0) {
       return null;
     }
+
     if (this.administrationScreenService.isConfigurationMode) {
-      const sorted = this.tabsContainer.tabInfoList.sort((a, b) => {
+      const sorted = tabs.sort((a, b) => {
         const aPriority = a.options?.configurationWizard?.activationPriority || Number.MAX_SAFE_INTEGER;
         const bPriority = b.options?.configurationWizard?.activationPriority || Number.MAX_SAFE_INTEGER;
 
@@ -74,10 +71,11 @@ export class CreateConnectionService {
 
       return sorted[0].key;
     }
-    return this.tabsContainer.tabInfoList[0].key;
+
+    return tabs[0].key;
   }
 
-  setCreateMethod(method?: string): void {
+  setCreateMethod(method?: string | null): void {
     if (!method) {
       const id = this.getDefault();
 
@@ -86,10 +84,10 @@ export class CreateConnectionService {
       }
       method = id;
     }
-    this.connectionsAdministrationNavService.navToCreate(method);
+    this.activateMethod(method);
   }
 
-  cancelCreate(): void{
+  cancelCreate(): void {
     this.clearConnectionTemplate();
     this.connectionsAdministrationNavService.navToRoot();
   }
@@ -100,25 +98,39 @@ export class CreateConnectionService {
       return;
     }
 
-    this.connectionsAdministrationNavService.navToCreate(defaultId);
+    this.activateMethod(defaultId);
   }
 
-  setConnectionTemplate(connection: AdminConnection, drivers: string[]): void {
-    this.connection = connection;
-    this.availableDrivers = drivers;
+  setConnectionTemplate(config: ConnectionConfig, availableDrivers: string[]): void {
+    this.data = new ConnectionFormState(
+      this.connectionFormService,
+      this.connectionsResource
+    );
+
+    this.data
+      .setOptions('create', 'admin')
+      .setConfig(config)
+      .setAvailableDrivers(availableDrivers || []);
+
+    this.data.load();
   }
 
   clearConnectionTemplate(): void {
-    this.connection = null;
-    this.availableDrivers = [];
-    this.credentials = {};
-    this.grantedSubjects = null;
+    this.data?.dispose();
+    this.data = null;
   }
 
   close(): void {
     this.clearConnectionTemplate();
-    for (const method of this.tabsContainer.tabInfoList) {
+    const tabs = this.tabsContainer.getDisplayed();
+
+    for (const method of tabs) {
       method.options?.close?.();
     }
+  }
+
+  private activateMethod(method: string) {
+    this.tabsContainer.select(method);
+    this.connectionsAdministrationNavService.navToCreate(method);
   }
 }

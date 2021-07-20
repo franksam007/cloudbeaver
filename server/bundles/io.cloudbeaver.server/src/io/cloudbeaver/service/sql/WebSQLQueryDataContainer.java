@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,9 +40,9 @@ public class WebSQLQueryDataContainer implements DBSDataContainer, DBPContextPro
 
     private static final Log log = Log.getLog(WebSQLQueryDataContainer.class);
 
-    private DBPDataSource dataSource;
-    private String query;
-    private DBSDataContainer queryDataContainer;
+    private final DBPDataSource dataSource;
+    private final String query;
+    private final DBSDataContainer queryDataContainer;
 
     public WebSQLQueryDataContainer(DBPDataSource dataSource, String query) {
         this.dataSource = dataSource;

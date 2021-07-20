@@ -1,29 +1,35 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { TLocalizationToken } from '@cloudbeaver/core-localization';
+import type { TLocalizationToken } from '@cloudbeaver/core-localization';
 import { OrderedMap } from '@cloudbeaver/core-utils';
 
-import { IMenuPanel } from '../IMenuPanel';
+import type { IMenuPanel } from '../IMenuPanel';
 
 const DEFAULT_ITEM_ORDER = 100;
 
+export type MenuItemType = 'checkbox' | 'radio';
 export interface IMenuItemOptions {
   id: string;
   // set title or getter
   title?: TLocalizationToken;
-  titleGetter?: () => TLocalizationToken | undefined;
+  titleGetter?: (...args: any[]) => TLocalizationToken | undefined;
   // set icon or getter
   icon?: string;
   iconGetter?: () => string | undefined;
+  tooltip?: string;
+  tooltipGetter?: () => TLocalizationToken | undefined;
   order?: number;
   isPanel?: boolean;
+  keepMenuOpen?: boolean;
   panel?: IMenuPanel;
+  type?: MenuItemType;
+  separator?: boolean;
   rtl?: boolean;
 }
 

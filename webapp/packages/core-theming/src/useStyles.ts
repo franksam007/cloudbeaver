@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { useObserver } from 'mobx-react';
+import { useObserver } from 'mobx-react-lite';
 import { useMemo, useRef, useState } from 'react';
 import { create } from 'reshadow';
 
@@ -17,9 +17,10 @@ import { ThemeService } from './ThemeService';
 import { applyComposes, ClassCollection, Composes } from './themeUtils';
 
 export type BaseStyles = ClassCollection | Composes;
-export type ThemeSelector = (theme: string) => Promise<BaseStyles | BaseStyles[]>;
+export type ThemeSelector = (theme: string) => Promise<undefined | BaseStyles | BaseStyles[]>;
 export type Style = BaseStyles | ThemeSelector;
 export type DynamicStyle = Style | boolean | undefined;
+export type ComponentStyle = DynamicStyle | DynamicStyle[];
 
 /**
  * Changes styles depending on theme
@@ -27,11 +28,11 @@ export type DynamicStyle = Style | boolean | undefined;
  * @param componentStyles styles array
  */
 export function useStyles(
-  ...componentStyles: Array<DynamicStyle | DynamicStyle[]>
+  ...componentStyles: ComponentStyle[]
 ): Record<string, any> {
   // todo do you understand that we store ALL STYLES in each component that uses this hook?
 
-  const stylesRef = useRef<Array<DynamicStyle | DynamicStyle[]>>([]);
+  const stylesRef = useRef<ComponentStyle[]>([]);
   const [patch, forceUpdate] = useState(0);
   const loadedStyles = useRef<BaseStyles[]>([]);
   const themeService = useService(ThemeService);
@@ -48,7 +49,7 @@ export function useStyles(
     stylesRef.current = componentStyles;
     lastThemeRef.current = currentThemeId;
     const staticStyles: BaseStyles[] = [];
-    const themedStyles = [];
+    const themedStyles: Array<Promise<undefined | BaseStyles | BaseStyles[]>> = [];
 
     for (const style of filteredStyles) {
       const data = (typeof style === 'object' || style instanceof Composes) ? style : style(currentThemeId);
@@ -65,7 +66,8 @@ export function useStyles(
       Promise
         .all(themedStyles)
         .then(styles => {
-          loadedStyles.current = flat([staticStyles, styles]);
+          loadedStyles.current = flat([staticStyles, flat(styles)])
+            .filter(Boolean) as BaseStyles[];
           forceUpdate(patch + 1);
         });
     }

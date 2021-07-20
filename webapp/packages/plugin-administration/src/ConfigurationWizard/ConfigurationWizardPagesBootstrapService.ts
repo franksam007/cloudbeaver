@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -39,19 +39,26 @@ export class ConfigurationWizardPagesBootstrapService extends Bootstrap {
       getDrawerComponent: () => WelcomeDrawerItem,
     });
     this.administrationItemService.create({
-      name: 'configuration',
+      name: this.serverConfigurationService.routeName,
       type: AdministrationItemType.Default,
       configurationWizardOptions: {
         description: 'administration_configuration_wizard_configuration_step_description',
-        order: 1.1,
+        order: 1.5,
+        onLoad: this.serverConfigurationService.loadConfig.bind(this.serverConfigurationService),
         isDone: this.serverConfigurationService.isDone.bind(this.serverConfigurationService),
-        onFinish: this.serverConfigurationService.validate.bind(this.serverConfigurationService),
-        onConfigurationFinish: this.serverConfigurationService.handleConfigurationFinish.bind(
-          this.serverConfigurationService
+        onFinish: this.serverConfigurationService.saveConfiguration.bind(
+          this.serverConfigurationService,
+          false
+        ),
+        onConfigurationFinish: this.serverConfigurationService.saveConfiguration.bind(
+          this.serverConfigurationService,
+          true
         ),
       },
       order: 4,
-      onActivate: this.serverConfigurationService.loadConfig.bind(this.serverConfigurationService),
+      onActivate: () => this.serverConfigurationService.loadConfig(),
+      onDeActivate: this.serverConfigurationService.deactivate.bind(this.serverConfigurationService),
+      onLoad: this.serverConfigurationService.loadConfig.bind(this.serverConfigurationService, false),
       getContentComponent: () => ServerConfigurationPage,
       getDrawerComponent: () => ServerConfigurationDrawerItem,
     });

@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import io.cloudbeaver.WebServiceUtils;
 import io.cloudbeaver.auth.provider.local.LocalAuthProvider;
 import io.cloudbeaver.model.WebConnectionConfig;
 import io.cloudbeaver.model.WebConnectionInfo;
+import io.cloudbeaver.model.session.WebAuthInfo;
 import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.model.user.WebRole;
 import io.cloudbeaver.model.user.WebUser;
@@ -31,10 +32,12 @@ import io.cloudbeaver.registry.WebServiceDescriptor;
 import io.cloudbeaver.registry.WebServiceRegistry;
 import io.cloudbeaver.server.CBAppConfig;
 import io.cloudbeaver.server.CBApplication;
+import io.cloudbeaver.server.CBConstants;
 import io.cloudbeaver.server.CBPlatform;
 import io.cloudbeaver.service.DBWServiceServerConfigurator;
 import io.cloudbeaver.service.admin.*;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
@@ -134,16 +137,35 @@ public class WebServiceAdmin implements DBWServiceAdmin {
 
     @NotNull
     @Override
-    public AdminRoleInfo createRole(@NotNull WebSession webSession, String roleId) throws DBWebException {
+    public AdminRoleInfo createRole(@NotNull WebSession webSession, String roleId, String roleName, String description) throws DBWebException {
         if (roleId.isEmpty()) {
             throw new DBWebException("Empty role ID");
         }
         try {
             WebRole newRole = new WebRole(roleId);
+            newRole.setName(roleName);
+            newRole.setDescription(description);
             CBPlatform.getInstance().getApplication().getSecurityController().createRole(newRole);
             return new AdminRoleInfo(newRole);
         } catch (Exception e) {
             throw new DBWebException("Error creating new role", e);
+        }
+    }
+
+    @NotNull
+    @Override
+    public AdminRoleInfo updateRole(@NotNull WebSession webSession, String roleId, String roleName, String description) throws DBWebException {
+        if (roleId.isEmpty()) {
+            throw new DBWebException("Empty role ID");
+        }
+        try {
+            WebRole newRole = new WebRole(roleId);
+            newRole.setName(roleName);
+            newRole.setDescription(description);
+            CBPlatform.getInstance().getApplication().getSecurityController().updateRole(newRole);
+            return new AdminRoleInfo(newRole);
+        } catch (Exception e) {
+            throw new DBWebException("Error updating role " + roleId, e);
         }
     }
 
@@ -246,10 +268,13 @@ public class WebServiceAdmin implements DBWServiceAdmin {
     // Connection management
 
     @Override
-    public List<WebConnectionInfo> getAllConnections(@NotNull WebSession webSession) throws DBWebException {
+    public List<WebConnectionInfo> getAllConnections(@NotNull WebSession webSession, @Nullable String id) throws DBWebException {
         // Get all connections from global configuration
         List<WebConnectionInfo> result = new ArrayList<>();
         for (DBPDataSourceContainer ds : WebServiceUtils.getGlobalDataSourceRegistry().getDataSources()) {
+            if (id != null && !id.equals(ds.getId())) {
+                continue;
+            }
             if (CBPlatform.getInstance().getApplicableDrivers().contains(ds.getDriver())) {
                 result.add(new WebConnectionInfo(webSession, ds));
             }
@@ -276,7 +301,7 @@ public class WebServiceAdmin implements DBWServiceAdmin {
     }
 
     @Override
-    public WebConnectionInfo copyConnectionConfiguration(@NotNull WebSession webSession, @NotNull String nodePath) throws DBWebException {
+    public WebConnectionInfo copyConnectionConfiguration(@NotNull WebSession webSession, @NotNull String nodePath, @NotNull WebConnectionConfig config) throws DBWebException {
         try {
             DBNModel globalNavigatorModel = webSession.getNavigatorModel();
             DBPDataSourceRegistry globalDataSourceRegistry = WebServiceUtils.getGlobalDataSourceRegistry();
@@ -291,8 +316,15 @@ public class WebServiceAdmin implements DBWServiceAdmin {
             DBPDataSourceContainer dataSourceTemplate = ((DBNDataSource)srcNode).getDataSourceContainer();
 
             DBPDataSourceContainer newDataSource = globalDataSourceRegistry.createDataSource(dataSourceTemplate);
+            // Copy props from config
+            if (!CommonUtils.isEmpty(config.getName())) {
+                newDataSource.setName(config.getName());
+            }
+            if (!CommonUtils.isEmpty(config.getDescription())) {
+                newDataSource.setDescription(config.getDescription());
+            }
 
-            ((DataSourceDescriptor) newDataSource).setNavigatorSettings(CBApplication.getInstance().getDefaultNavigatorSettings());
+            ((DataSourceDescriptor) newDataSource).setNavigatorSettings(CBApplication.getInstance().getAppConfiguration().getDefaultNavigatorSettings());
             globalDataSourceRegistry.addDataSource(newDataSource);
 
             return new WebConnectionInfo(webSession, newDataSource);
@@ -341,8 +373,21 @@ public class WebServiceAdmin implements DBWServiceAdmin {
         try {
             CBAppConfig appConfig = new CBAppConfig();
             appConfig.setAnonymousAccessEnabled(config.isAnonymousAccessEnabled());
-            appConfig.setAuthenticationEnabled(config.isAuthenticationEnabled());
             appConfig.setSupportsCustomConnections(config.isCustomConnectionsEnabled());
+            appConfig.setPublicCredentialsSaveEnabled(config.isPublicCredentialsSaveEnabled());
+            appConfig.setAdminCredentialsSaveEnabled(config.isAdminCredentialsSaveEnabled());
+            if (CommonUtils.isEmpty(config.getEnabledAuthProviders())) {
+                // All of them
+                appConfig.setEnabledAuthProviders(new String[0]);
+            } else {
+                appConfig.setEnabledAuthProviders(config.getEnabledAuthProviders().toArray(new String[0]));
+            }
+
+            appConfig.setDefaultNavigatorSettings(
+                CBApplication.getInstance().getAppConfiguration().getDefaultNavigatorSettings());
+
+            List<WebAuthInfo> authInfoList = webSession.getAllAuthInfo();
+
             String adminName = config.getAdminName();
             String adminPassword = config.getAdminPassword();
             if (CommonUtils.isEmpty(adminName)) {
@@ -350,6 +395,15 @@ public class WebServiceAdmin implements DBWServiceAdmin {
                 WebUser curUser = webSession.getUser();
                 adminName = curUser == null ? null : curUser.getUserId();
                 adminPassword = null;
+            }
+            if (CommonUtils.isEmpty(adminName)) {
+                // Try to get admin name from existing authentications (first one)
+                if (!authInfoList.isEmpty()) {
+                    adminName = authInfoList.get(0).getUserId();
+                }
+            }
+            if (CommonUtils.isEmpty(adminName)) {
+                adminName = CBConstants.DEFAULT_ADMIN_NAME;
             }
 
             // Patch configuration by services
@@ -361,15 +415,25 @@ public class WebServiceAdmin implements DBWServiceAdmin {
                 }
             }
 
+            boolean configurationMode = CBApplication.getInstance().isConfigurationMode();
+
             CBApplication.getInstance().finishConfiguration(
                 config.getServerName(),
+                config.getServerURL(),
                 adminName,
                 adminPassword,
+                authInfoList,
                 config.getSessionExpireTime(),
                 appConfig);
 
             // Refresh active session
-            webSession.forceUserRefresh(null);
+            if (configurationMode) {
+                // In config mode we always refresh because admin user doesn't exist yet
+                webSession.forceUserRefresh(null);
+            } else {
+                // Just reload session state
+                webSession.forceUserRefresh(webSession.getUser());
+            }
         } catch (Throwable e) {
             throw new DBWebException("Error configuring server", e);
         }
@@ -377,8 +441,13 @@ public class WebServiceAdmin implements DBWServiceAdmin {
     }
 
     @Override
-    public boolean setDefaultNavigatorSettings(WebSession webSession, DBNBrowseSettings settings) {
-        CBApplication.getInstance().setDefaultNavigatorSettings(settings);
+    public boolean setDefaultNavigatorSettings(WebSession webSession, DBNBrowseSettings settings) throws DBWebException {
+        CBApplication.getInstance().getAppConfiguration().setDefaultNavigatorSettings(settings);
+//        try {
+//            CBApplication.getInstance().flushConfiguration();
+//        } catch (DBException e) {
+//            throw new DBWebException("Error saving server configuration", e);
+//        }
         return true;
     }
 

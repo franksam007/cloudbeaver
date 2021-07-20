@@ -1,21 +1,22 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
-import { useCallback, useState } from 'react';
+import { observer } from 'mobx-react-lite';
+import { useCallback } from 'react';
 import styled, { css } from 'reshadow';
 
 import { InlineEditor } from '@cloudbeaver/core-app';
+import { PlaceholderComponent, useObjectRef } from '@cloudbeaver/core-blocks';
 import { useTranslate } from '@cloudbeaver/core-localization';
 import { composes, useStyles } from '@cloudbeaver/core-theming';
 
-import { ContainerDataSource } from '../../ContainerDataSource';
-import { DataModelWrapper } from '../DataModelWrapper';
+import { ResultSetConstraintAction } from '../../DatabaseDataModel/Actions/ResultSet/ResultSetConstraintAction';
+import type { ITableHeaderPlaceholderProps } from './TableHeaderService';
 
 const styles = composes(
   css`
@@ -24,50 +25,59 @@ const styles = composes(
     }
   `,
   css`
-    SubmittingForm {
-      height: 40px;
-      flex: 1;
-      display: flex;
-      align-items: center;
-    }
     InlineEditor {
       flex: 1;
       height: 24px;
-      margin: 0 12px;
     }
   `
 );
 
-interface Props {
-  context: DataModelWrapper;
-}
-
-export const TableWhereFilter = observer(function TableWhereFilter({
-  context,
-}: Props) {
+export const TableWhereFilter: PlaceholderComponent<ITableHeaderPlaceholderProps> = observer(function TableWhereFilter({
+  model,
+  resultIndex,
+}) {
   const translate = useTranslate();
-  const [filterValue, setValue] = useState(() => (context.source as ContainerDataSource).options?.whereFilter || '');
+  const hasResult = model.source.hasResult(resultIndex);
+  let filterValue = model.source.options?.whereFilter || '';
+
+  if (hasResult) {
+    const constraints = model.source.getAction(resultIndex, ResultSetConstraintAction);
+    if (constraints.filterConstraints.length > 0 && model.source.requestInfo.requestFilter) {
+      filterValue = model.source.requestInfo.requestFilter;
+    }
+  }
+
+  const setValue = useCallback((filterValue: string) => {
+    const constraints = model.source.getAction(resultIndex, ResultSetConstraintAction);
+
+    model.source.options.whereFilter = filterValue;
+    constraints?.deleteFilters();
+  }, [model.source.options]);
+
+  const props = useObjectRef({ model, resultIndex, filterValue });
 
   const handleApply = useCallback(() => {
-    (context.source as ContainerDataSource).options!.whereFilter = filterValue;
-    context.deprecatedModel.setQueryWhereFilter(filterValue);
-    context.refresh();
-  }, [context, filterValue]);
+    const { model, resultIndex } = props;
+    if (model.isLoading() || model.isDisabled(resultIndex)) {
+      return;
+    }
+    model.refresh();
+  }, []);
 
-  const resetFilter = useCallback(
-    () => {
-      const applyNeeded = context.deprecatedModel.getQueryWhereFilter() === filterValue;
+  const resetFilter = useCallback(() => {
+    const { model, resultIndex } = props;
+    const constraints = model.source.getAction(resultIndex, ResultSetConstraintAction);
+    if (model.isLoading() || model.isDisabled(resultIndex)) {
+      return;
+    }
 
-      setValue('');
+    constraints.deleteDataFilters();
 
-      if (applyNeeded) {
-        (context.source as ContainerDataSource).options!.whereFilter = '';
-        context.deprecatedModel.setQueryWhereFilter('');
-        context.refresh();
-      }
-    },
-    [context, filterValue]
-  );
+    const applyNeeded = !!model.requestInfo.requestFilter;
+    if (applyNeeded) {
+      model.refresh();
+    }
+  }, []);
 
   return styled(useStyles(styles))(
     <InlineEditor
@@ -76,6 +86,7 @@ export const TableWhereFilter = observer(function TableWhereFilter({
       placeholder={translate('table_header_sql_expression')}
       controlsPosition='inside'
       edited={!!filterValue}
+      disabled={model.isLoading() || model.source.results.length > 1 || model.isDisabled(resultIndex)}
       simple
       onSave={handleApply}
       onUndo={resetFilter}

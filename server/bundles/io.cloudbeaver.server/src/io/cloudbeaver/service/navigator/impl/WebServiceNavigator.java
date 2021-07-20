@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,10 +30,7 @@ import org.jkiss.dbeaver.model.DBPDataSource;
 import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.exec.DBCExecutionContext;
 import org.jkiss.dbeaver.model.impl.struct.ContextDefaultObjectsReader;
-import org.jkiss.dbeaver.model.navigator.DBNContainer;
-import org.jkiss.dbeaver.model.navigator.DBNModel;
-import org.jkiss.dbeaver.model.navigator.DBNNode;
-import org.jkiss.dbeaver.model.navigator.DBNProject;
+import org.jkiss.dbeaver.model.navigator.*;
 import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.model.struct.DBSObject;
 import org.jkiss.dbeaver.model.struct.rdb.DBSCatalog;
@@ -77,7 +74,7 @@ public class WebServiceNavigator implements DBWServiceNavigator {
                 if (parentNode == null) {
                     throw new DBWebException("Node '" + parentPath + "' not found");
                 }
-                if (!parentNode.hasChildren(true)) {
+                if (!parentNode.hasChildren(false)) {
                     return EMPTY_NODE_LIST;
                 }
                 nodeChildren = parentNode.getChildren(monitor);
@@ -94,6 +91,10 @@ public class WebServiceNavigator implements DBWServiceNavigator {
             }
 
             for (DBNNode node : nodeChildren) {
+                if (node instanceof DBNDatabaseFolder && CommonUtils.isEmpty(((DBNDatabaseFolder) node).getMeta().getChildren(null))) {
+                    // Skip empty folders. Folder may become empty if their nested elements are provided by UI plugins.
+                    continue;
+                }
                 if (!CommonUtils.toBoolean(onlyFolders) || node instanceof DBNContainer) {
                     result.add(new WebNavigatorNodeInfo(session, node));
                 }
@@ -129,7 +130,13 @@ public class WebServiceNavigator implements DBWServiceNavigator {
             if (node == null) {
                 throw new DBWebException("Navigator node '"  + nodePath + "' not found");
             }
-            node.refreshNode(monitor, this);
+            if (node instanceof DBNDataSource) {
+                // Do not refresh entire tree - just clear child nodes
+                // Otherwise refresh may fail if navigator settings were changed.
+                ((DBNDataSource) node).cleanupNode();
+            } else {
+                node.refreshNode(monitor, this);
+            }
             return true;
         } catch (DBException e) {
             throw new DBWebException("Error refreshing navigator node '"  + nodePath + "'", e);

@@ -1,17 +1,17 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import styled from 'reshadow';
 
 import { useStyles, Style } from '@cloudbeaver/core-theming';
 
-import { ITab } from '../ITab';
+import type { ITab } from '../ITab';
 import { Tab } from '../Tab/Tab';
 import { TabIcon } from '../Tab/TabIcon';
 import { TabTitle } from '../Tab/TabTitle';

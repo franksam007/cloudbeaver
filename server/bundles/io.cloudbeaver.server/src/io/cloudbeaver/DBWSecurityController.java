@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,6 +70,11 @@ public interface DBWSecurityController {
      */
     Map<String, Object> getUserCredentials(String userId, WebAuthProviderDescriptor authProvider) throws DBCException;
 
+    /**
+     * Returns list of auth provider IDs associated with this user
+     */
+    String[] getUserLinkedProviders(String userId) throws DBCException;
+
     ///////////////////////////////////////////
     // Roles
 
@@ -79,6 +84,8 @@ public interface DBWSecurityController {
     WebRole[] findRoles(String roleName) throws DBCException;
 
     void createRole(WebRole role) throws DBCException;
+
+    void updateRole(WebRole role) throws DBCException;
 
     void deleteRole(String roleId) throws DBCException;
 

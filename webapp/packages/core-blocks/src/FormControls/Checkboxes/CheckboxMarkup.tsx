@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,7 +8,9 @@
 
 import styled, { css } from 'reshadow';
 
-import { composes, useStyles } from '@cloudbeaver/core-theming';
+import { ComponentStyle, Composes, composes, useStyles } from '@cloudbeaver/core-theming';
+
+export type CheckboxMod = 'primary' | 'surface' | 'small';
 
 const checkboxStyles = composes(
   css`
@@ -46,13 +48,39 @@ const checkboxStyles = composes(
   `
 );
 
-const checkboxMod = {
+const checkboxMod: Record<CheckboxMod, Composes> = {
   primary: composes(
     css`
       checkbox {
         composes: theme-checkbox_primary from global;
       }
     `
+  ),
+  surface: composes(
+    css`
+      checkbox {
+        composes: theme-checkbox_surface from global;
+      }
+    `
+  ),
+  small: composes(
+    css`
+      checkbox {
+        composes: theme-checkbox_small from global;
+      }
+    `,
+    css`
+      checkbox-container {
+        & checkbox {
+          width: 14px;
+          height: 14px;
+        }
+        & checkbox-background {
+          width: 14px;
+          height: 14px;
+        }
+      }
+    `,
   ),
 };
 
@@ -73,26 +101,40 @@ const checkboxState = {
   ),
 };
 
-interface ICheckboxMarkupProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface ICheckboxMarkupProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'style'> {
   label?: string;
   indeterminate?: boolean;
+  ripple?: boolean;
+  mod?: CheckboxMod[];
+  style?: ComponentStyle;
 }
 
-export const CheckboxMarkup: React.FC<ICheckboxMarkupProps> = function CheckboxMarkup({ label, className, ...rest }) {
-  return styled(useStyles(checkboxStyles, checkboxMod.primary, rest.disabled
-    && checkboxState.disabled, rest.checked && checkboxState.checked))(
-    <checkbox-container className={className} as='div'>
+export const CheckboxMarkup: React.FC<ICheckboxMarkupProps> = function CheckboxMarkup({
+  id, label, className, title, mod = ['primary'], ripple = true, style, ...rest
+}) {
+  return styled(
+    useStyles(
+      checkboxStyles,
+      ...(mod || []).map(mod => checkboxMod[mod]),
+      rest.disabled && checkboxState.disabled,
+      rest.checked && checkboxState.checked,
+      style
+    )
+  )(
+    <checkbox-container className={className} title={title} as='div'>
       <checkbox as='div'>
-        <checkbox-input as='input' type='checkbox' {...rest} />
+        <checkbox-input as='input' type='checkbox' {...rest} id={id || rest.name} />
         <checkbox-background as='div'>
           <checkbox-checkmark as='svg' viewBox='0 0 24 24'>
             <checkbox-checkmark-path as='path' fill='none' d='M1.73,12.91 8.1,19.28 22.79,4.59' />
           </checkbox-checkmark>
           <checkbox-mixedmark as='div' />
         </checkbox-background>
-        <checkbox-ripple as='div' />
+        {ripple && (
+          <checkbox-ripple as='div' />
+        )}
       </checkbox>
-      {label && rest.id && <checkbox-label as='label' htmlFor={rest.id}>{label}</checkbox-label>}
+      {label && (id || rest.name) && <checkbox-label as='label' htmlFor={id || rest.name}>{label}</checkbox-label>}
     </checkbox-container>
   );
 };

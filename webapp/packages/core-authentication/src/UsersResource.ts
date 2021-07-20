@@ -1,23 +1,26 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
 import { injectable } from '@cloudbeaver/core-di';
+import { ServerConfigResource } from '@cloudbeaver/core-root';
 import {
   GraphQLService,
   CachedMapResource,
   ResourceKey,
   AdminConnectionGrantInfo,
   AdminUserInfoFragment,
-  ObjectPropertyInfo, AdminUserInfo,
-  ResourceKeyUtils
+  AdminUserInfo,
+  ResourceKeyUtils,
+  GetUsersListQueryVariables
 } from '@cloudbeaver/core-sdk';
 import { MetadataMap } from '@cloudbeaver/core-utils';
 
+import { AUTH_PROVIDER_LOCAL_ID } from './AUTH_PROVIDER_LOCAL_ID';
 import { AuthInfoService } from './AuthInfoService';
 import { AuthProviderService } from './AuthProviderService';
 
@@ -26,6 +29,7 @@ const NEW_USER_SYMBOL = Symbol('new-user');
 export type AdminUser = AdminUserInfoFragment;
 
 type AdminUserNew = AdminUser & { [NEW_USER_SYMBOL]: boolean };
+type UserResourceIncludes = Omit<GetUsersListQueryVariables, 'userId'>;
 
 interface UserCreateOptions {
   userId: string;
@@ -35,15 +39,18 @@ interface UserCreateOptions {
 }
 
 @injectable()
-export class UsersResource extends CachedMapResource<string, AdminUser> {
+export class UsersResource extends CachedMapResource<string, AdminUser, UserResourceIncludes> {
+  static keyAll = 'all';
   private loadedKeyMetadata: MetadataMap<string, boolean>;
   constructor(
     private graphQLService: GraphQLService,
+    private serverConfigResource: ServerConfigResource,
     private authProviderService: AuthProviderService,
     private authInfoService: AuthInfoService
   ) {
-    super(new Map());
+    super();
     this.loadedKeyMetadata = new MetadataMap(() => false);
+    this.serverConfigResource.onDataUpdate.addHandler(this.refreshAllLazy.bind(this));
   }
 
   isNew(id: string): boolean {
@@ -68,17 +75,12 @@ export class UsersResource extends CachedMapResource<string, AdminUser> {
       grantedConnections: [],
       configurationParameters: {},
       metaParameters: {},
-      origin: {
-        type: 'local',
+      origins: [{
+        type: AUTH_PROVIDER_LOCAL_ID,
         displayName: 'Local',
-      },
+      }],
+      linkedAuthProviders: [AUTH_PROVIDER_LOCAL_ID],
     };
-  }
-
-  async loadOrigin(userId: string): Promise<ObjectPropertyInfo[]> {
-    const { user } = await this.graphQLService.sdk.getUserOrigin({ userId });
-
-    return user[0].origin.details || [];
   }
 
   async loadConnections(userId: string): Promise<AdminConnectionGrantInfo[]> {
@@ -94,7 +96,11 @@ export class UsersResource extends CachedMapResource<string, AdminUser> {
   async create({
     userId, roles, credentials, grantedConnections,
   }: UserCreateOptions): Promise<AdminUser> {
-    const { user } = await this.graphQLService.sdk.createUser({ userId });
+    const { user } = await this.graphQLService.sdk.createUser({
+      userId,
+      ...this.getDefaultIncludes(),
+      ...this.getIncludesMap(userId),
+    });
 
     try {
       await this.updateCredentials(userId, credentials);
@@ -130,13 +136,19 @@ export class UsersResource extends CachedMapResource<string, AdminUser> {
   }
 
   async updateCredentials(userId: string, credentials: Record<string, any>): Promise<void> {
-    const provider = 'local';
-    const processedCredentials = await this.authProviderService.processCredentials(provider, credentials);
+    const processedCredentials = await this.authProviderService.processCredentials(AUTH_PROVIDER_LOCAL_ID, credentials);
 
     await this.graphQLService.sdk.setUserCredentials({
-      providerId: provider,
+      providerId: AUTH_PROVIDER_LOCAL_ID,
       userId,
       credentials: processedCredentials,
+    });
+  }
+
+  async updateLocalPassword(oldPassword: string, newPassword: string): Promise<void> {
+    await this.graphQLService.sdk.authChangeLocalPassword({
+      oldPassword: this.authProviderService.hashValue(oldPassword),
+      newPassword: this.authProviderService.hashValue(newPassword),
     });
   }
 
@@ -153,34 +165,43 @@ export class UsersResource extends CachedMapResource<string, AdminUser> {
   }
 
   async loadAll(): Promise<Map<string, AdminUser>> {
-    await this.load('all');
+    this.resetIncludes();
+    await this.load(UsersResource.keyAll);
     return this.data;
   }
 
   async refreshAll(): Promise<Map<string, AdminUser>> {
-    await this.refresh('all');
+    this.resetIncludes();
+    await this.refresh(UsersResource.keyAll);
     return this.data;
   }
 
   refreshAllLazy(): void {
-    this.markOutdated('all');
-    this.loadedKeyMetadata.set('all', false);
+    this.resetIncludes();
+    this.markOutdated(UsersResource.keyAll);
+    this.loadedKeyMetadata.set(UsersResource.keyAll, false);
   }
 
-  protected async loader(key: ResourceKey<string>): Promise<Map<string, AdminUser>> {
-    const userId = key === 'all' ? undefined : key as string;
+  protected async loader(key: ResourceKey<string>, includes: string[] | undefined): Promise<Map<string, AdminUser>> {
+    await ResourceKeyUtils.forEachAsync(key, async key => {
+      const { users } = await this.graphQLService.sdk.getUsersList({
+        userId: key === UsersResource.keyAll ? undefined : key,
+        ...this.getDefaultIncludes(),
+        ...this.getIncludesMap(key === UsersResource.keyAll ? undefined : key, includes),
+      });
 
-    const { users } = await this.graphQLService.sdk.getUsersList({ userId });
+      if (key === UsersResource.keyAll) {
+        this.data.clear();
+      }
 
-    if (key === 'all') {
-      this.data.clear();
-      this.loadedKeyMetadata.set('all', true);
-    }
+      for (const user of users) {
+        this.set(user.userId, user);
+      }
 
-    for (const user of users) {
-      this.set(user.userId, user as AdminUser);
-    }
-    this.markUpdated(key);
+      if (key === UsersResource.keyAll) {
+        this.loadedKeyMetadata.set(UsersResource.keyAll, true);
+      }
+    });
 
     return this.data;
   }
@@ -188,8 +209,14 @@ export class UsersResource extends CachedMapResource<string, AdminUser> {
   private isActiveUser(userId: string) {
     return this.authInfoService.userInfo?.userId === userId;
   }
+
+  private getDefaultIncludes(): UserResourceIncludes {
+    return {
+      customIncludeOriginDetails: false,
+    };
+  }
 }
 
 export function isLocalUser(user: AdminUser): boolean {
-  return user.origin.type === 'local';
+  return user.origins.some(origin => origin.type === AUTH_PROVIDER_LOCAL_ID);
 }

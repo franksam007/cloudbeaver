@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -29,13 +29,14 @@ import {
   NavigationTreeContextMenuService,
   SettingsMenuService,
   LogViewerService,
-  LogViewerMenuService,
+  LogViewerBootstrap,
   TopNavService,
   AppScreenService,
   CoreSettingsService,
   AdministrationTopAppBarBootstrapService,
   AppLocaleService,
-  SessionExpiredDialogService
+  SessionExpiredDialogService,
+  SessionExpireWarningDialogService
 } from '@cloudbeaver/core-app';
 import {
   AppAuthService,
@@ -49,31 +50,38 @@ import {
 } from '@cloudbeaver/core-authentication';
 import { BlocksLocaleService } from '@cloudbeaver/core-blocks';
 import {
+  ConnectionExecutionContextResource,
+  ConnectionExecutionContextService,
   ConnectionsManagerService,
   ConnectionInfoResource,
   ContainerResource,
   DBDriverResource,
+  NetworkHandlerResource,
   DatabaseAuthModelsResource,
   ConnectionAuthService,
   ConnectionsAdministrationService,
   ConnectionsResource,
   ConnectionsLocaleService,
-  DriverPropertiesService,
   ConnectionsAdministrationNavService,
   CreateConnectionService,
   ConnectionManualService,
   ConnectionSearchService,
   CreateConnectionBaseBootstrap,
   ConnectionFormService,
-  ConnectionFormBaseBootstrap
+  ConnectionOptionsTabService,
+  ConnectionDriverPropertiesTabService,
+  ConnectionSSHTabService,
+  ConnectionOriginInfoTabService,
+  ConnectionAccessTabService
 } from '@cloudbeaver/core-connections';
-import { PluginManifest } from '@cloudbeaver/core-di';
+import type { PluginManifest } from '@cloudbeaver/core-di';
 import { CommonDialogService, ContextMenuService } from '@cloudbeaver/core-dialogs';
 import { NotificationService, ExceptionsCatcherService, EventsSettingsService } from '@cloudbeaver/core-events';
 import { LocalizationService } from '@cloudbeaver/core-localization';
 import { PluginManagerService } from '@cloudbeaver/core-plugin';
 import { ProductManagerService, ProductSettingsService } from '@cloudbeaver/core-product';
 import {
+  NetworkStateService,
   SessionService,
   ServerService,
   PermissionsService,
@@ -81,6 +89,7 @@ import {
   ServerSettingsService,
   ServerConfigResource,
   PermissionsResource,
+  SessionDataResource,
   SessionResource,
   SessionExpireService
 } from '@cloudbeaver/core-root';
@@ -88,6 +97,7 @@ import { RouterService, ScreenService } from '@cloudbeaver/core-routing';
 import { EnvironmentService, GraphQLService } from '@cloudbeaver/core-sdk';
 import { LocalStorageSaveService, SettingsService } from '@cloudbeaver/core-settings';
 import { ThemeService } from '@cloudbeaver/core-theming';
+import { NavigationService, OptionsPanelService, ClipboardBootstrap, ClipboardService } from '@cloudbeaver/core-ui';
 import { ActiveViewService } from '@cloudbeaver/core-view';
 
 export const coreManifest: PluginManifest = {
@@ -98,6 +108,7 @@ export const coreManifest: PluginManifest = {
 
   providers: [
     RouterService, // important, should be first because the router starts in load phase first after all plugins register phase
+    NetworkStateService,
     AdministrationLocaleService,
     AdministrationTopAppBarService,
     AdministrationScreenService,
@@ -122,15 +133,23 @@ export const coreManifest: PluginManifest = {
     ServerConfigResource,
     PermissionsResource,
     SessionResource,
+    SessionDataResource,
     SessionSettingsService,
     PermissionsService,
     CoreSettingsService,
     CommonDialogService,
+    ClipboardService,
+    ClipboardBootstrap,
     SessionExpireService,
+    SessionExpireWarningDialogService,
     SessionExpiredDialogService,
     ConnectionsLocaleService,
-    ConnectionFormBaseBootstrap,
     ConnectionFormService,
+    ConnectionOptionsTabService,
+    ConnectionSSHTabService,
+    ConnectionOriginInfoTabService,
+    ConnectionAccessTabService,
+    ConnectionDriverPropertiesTabService,
     ConnectionDialogsService,
     ConnectionSchemaManagerService,
     ConnectionInfoResource,
@@ -138,7 +157,9 @@ export const coreManifest: PluginManifest = {
     AppLocaleService,
     ContainerResource,
     DBDriverResource,
-    DriverPropertiesService,
+    NetworkHandlerResource,
+    ConnectionExecutionContextResource,
+    ConnectionExecutionContextService,
     ConnectionsManagerService,
     ScreenService,
     AppScreenService,
@@ -146,10 +167,12 @@ export const coreManifest: PluginManifest = {
     EnvironmentService,
     ExceptionsCatcherService,
     EventsSettingsService,
+    NavigationService,
+    OptionsPanelService,
     GraphQLService,
     LocalStorageSaveService,
     LocalizationService,
-    LogViewerMenuService,
+    LogViewerBootstrap,
     LogViewerService,
     MainMenuService,
     TopNavService,
@@ -177,9 +200,4 @@ export const coreManifest: PluginManifest = {
     ThemeService,
     ServerService,
   ],
-
-  async initialize() {
-    // Note that the initialization of the core occurs in AppBootstrap
-    // and it is called before the initialization phase of all manifests
-  },
 };

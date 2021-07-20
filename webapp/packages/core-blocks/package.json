@@ -9,13 +9,13 @@
   "types": "src/index.ts",
   "scripts": {
     "prebuild": "rimraf lib/*",
-    "build": "webpack --config ../../configs/webpack.plugin.config",
+    "build": "webpack --config ../../configs/webpack.plugin.config.js",
     "postbuild": "tsc",
     "lint": "eslint ./src/ --ext .ts,.tsx",
     "lint-fix": "eslint ./src/ --ext .ts,.tsx --fix"
   },
   "dependencies": {
-    "go-split": "^1.x.x",
+    "go-split": "^2.x.x",
     "sanitize-html": "^1.x.x",
     "react-sanitized-html": "^2.x.x"
   },
@@ -27,10 +27,10 @@
     "@cloudbeaver/core-theming": "^0.1.0",
     "@cloudbeaver/core-dialogs": "^0.1.0",
     "@cloudbeaver/core-utils": "^0.1.0",
-    "reshadow": "^0.0.1-alpha.78",
-    "reakit": "^1.1.1",
+    "reshadow": "^0.x.x",
+    "reakit": "^1.x.x",
     "react": "^16.x.x",
     "mobx": "^5.x.x",
-    "mobx-react": "^6.x.x"
+    "mobx-react-lite": "^3.x.x"
   }
 }

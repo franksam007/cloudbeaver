@@ -1,67 +1,141 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { ExecutionContext, IExecutionContextProvider } from './ExecutionContext';
-import { IExecutor } from './IExecutor';
-import { IExecutorHandler } from './IExecutorHandler';
+import { flat } from '@cloudbeaver/core-utils';
+
+import { ExecutionContext } from './ExecutionContext';
+import { ExecutorHandlersCollection } from './ExecutorHandlersCollection';
+import { ExecutorInterrupter, IExecutorInterrupter } from './ExecutorInterrupter';
+import type { IExecutionContext, IExecutionContextProvider } from './IExecutionContext';
+import type { IExecutor } from './IExecutor';
+import type { IExecutorHandler } from './IExecutorHandler';
+import type { ChainLinkType, IExecutorHandlersCollection } from './IExecutorHandlersCollection';
 import { BlockedExecution, TaskScheduler } from './TaskScheduler/TaskScheduler';
 
-export class Executor<T = unknown> implements IExecutor<T> {
-  private handlers: Array<IExecutorHandler<any>> = [];
-  private postHandlers: Array<IExecutorHandler<any>> = [];
+export class Executor<T = void> extends ExecutorHandlersCollection<T> implements IExecutor<T> {
+  get executing(): boolean {
+    return this.scheduler.executing;
+  }
+
   private scheduler: TaskScheduler<T>;
 
   constructor(
     private defaultData: T | null = null,
     isBlocked: BlockedExecution<T> | null = null
   ) {
+    super();
     this.scheduler = new TaskScheduler(isBlocked);
   }
 
-  async execute(data: T): Promise<IExecutionContextProvider<T>> {
+  async execute(
+    data: T,
+    context?: IExecutionContext<T>,
+    scope?: IExecutorHandlersCollection<T> | Array<IExecutorHandlersCollection<T>>
+  ): Promise<IExecutionContextProvider<T>> {
     data = this.getDefaultData(data);
 
     return await this.scheduler.schedule(data, async () => {
-      const context = new ExecutionContext(data);
-
-      try {
-        for (const handler of this.handlers) {
-          const result = await handler(data, context);
-
-          if (result === false) {
-            return context;
-          }
-        }
-      } finally {
-        for (const handler of this.postHandlers) {
-          await handler(data, context);
-        }
+      if (!context) {
+        context = new ExecutionContext(data);
       }
-      return context;
+      return this.executeHandlersCollection<T>(this, data, context, flat([(scope || [])]));
     });
   }
 
-  addHandler(handler: IExecutorHandler<T>): this {
-    this.handlers.push(handler);
-    return this;
+  async executeScope(
+    data: T,
+    scope?: IExecutorHandlersCollection<T> | Array<IExecutorHandlersCollection<T>>,
+    context?: IExecutionContext<T>
+  ): Promise<IExecutionContextProvider<T>> {
+    data = this.getDefaultData(data);
+
+    return await this.scheduler.schedule(data, async () => {
+      if (!context) {
+        context = new ExecutionContext(data);
+      }
+      return this.executeHandlersCollection<T>(this, data, context, flat([(scope || [])]));
+    });
   }
 
-  removeHandler(handler: IExecutorHandler<T>): void {
-    this.handlers = this.handlers.filter(h => h !== handler);
+  private async executeHandlersCollection<T>(
+    collection: IExecutorHandlersCollection<T>,
+    data: T,
+    context: IExecutionContext<T>,
+    scoped: Array<IExecutorHandlersCollection<T>>
+  ): Promise<IExecutionContextProvider<T>> {
+    const interrupter = context.getContext(ExecutorInterrupter.interruptContext);
+    scoped = [...collection.collections, ...scoped];
+
+    await this.executeChain(collection, data, context, 'before');
+
+    for (const scope of scoped) {
+      await this.executeChain(scope, data, context, 'before');
+    }
+
+    try {
+      await this.executeHandlers(data, context, collection.handlers, interrupter);
+
+      for (const scope of scoped) {
+        await this.executeHandlers(data, context, scope.handlers, interrupter);
+      }
+    } finally {
+      await this.executeHandlers(data, context, collection.postHandlers);
+
+      for (const scope of scoped) {
+        await this.executeHandlers(data, context, scope.postHandlers);
+      }
+    }
+
+    await this.executeChain(collection, data, context, 'next');
+
+    for (const scope of scoped) {
+      await this.executeChain(scope, data, context, 'next');
+    }
+    return context;
   }
 
-  addPostHandler(handler: IExecutorHandler<T>): this {
-    this.postHandlers.push(handler);
-    return this;
+  private async executeChain<T>(
+    collection: IExecutorHandlersCollection<T>,
+    data: T,
+    context: IExecutionContext<T>,
+    type: ChainLinkType
+  ): Promise<void> {
+    const interrupter = context.getContext(ExecutorInterrupter.interruptContext);
+
+    for (const link of collection.chain.filter(link => link.type === type)) {
+      if (interrupter.interrupted) {
+        return;
+      }
+
+      const mappedData = link.map ? link.map(data, context) : data;
+      const chainedContext = new ExecutionContext(mappedData, context);
+
+      await this.executeHandlersCollection(
+        link.executor,
+        mappedData,
+        chainedContext,
+        flat([(collection.getLinkHandlers(link.executor) || [])])
+      );
+    }
   }
 
-  removePostHandler(handler: IExecutorHandler<T>): void {
-    this.postHandlers = this.postHandlers.filter(h => h !== handler);
+  private async executeHandlers<T>(
+    data: T,
+    context: IExecutionContext<T>,
+    handlers: Array<IExecutorHandler<any>>,
+    interrupter?: IExecutorInterrupter
+  ): Promise<void> {
+    for (const handler of handlers) {
+      if (interrupter?.interrupted) {
+        return;
+      }
+      await handler(data, context);
+    }
   }
 
   private getDefaultData(data: T): T {

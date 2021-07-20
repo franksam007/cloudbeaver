@@ -13,10 +13,11 @@
       "dom",
       "ES2019"
     ],
+    "useDefineForClassFields": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "emitDeclarationOnly": true,
-    "importsNotUsedAsValues": "remove",
+    "importsNotUsedAsValues": "error",
     "jsx": "preserve",
     "target": "ES6",
     "module": "esnext",

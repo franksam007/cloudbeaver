@@ -1,20 +1,21 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import {
   useEffect, useRef, useCallback, ChangeEvent
 } from 'react';
+import { useImperativeHandle } from 'react';
 import styled, { use } from 'reshadow';
 
-import { Icon } from '@cloudbeaver/core-blocks';
+import { Icon, useObjectRef } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
-import { CommonDialogService } from '@cloudbeaver/core-dialogs';
+import { CommonDialogService, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { useStyles } from '@cloudbeaver/core-theming';
 
 import { EditorDialog } from './EditorDialog';
@@ -33,15 +34,17 @@ export interface InlineEditorProps {
   hideSave?: boolean;
   hideCancel?: boolean;
   edited?: boolean;
+  disabled?: boolean;
   autofocus?: boolean;
+  active?: boolean;
   onChange: (value: string) => void;
   onSave: () => void;
   onReject?: () => void;
-  onUndo: () => void;
+  onUndo?: () => void;
   className?: string;
 }
 
-export const InlineEditor = observer(function InlineEditor({
+export const InlineEditor = observer<InlineEditorProps, HTMLInputElement | null>(function InlineEditor({
   name,
   value,
   type = 'text',
@@ -52,57 +55,72 @@ export const InlineEditor = observer(function InlineEditor({
   hideSave,
   hideCancel,
   edited = false,
+  disabled,
   autofocus,
+  active,
   onChange,
   onSave,
   onUndo,
   onReject,
   className,
-}: InlineEditorProps) {
+}, ref) {
+  const props = useObjectRef({
+    onChange,
+    onReject,
+    onSave,
+    value,
+  });
+
   const commonDialogService = useService(CommonDialogService);
 
-  const handleChange = useCallback((event: ChangeEvent<HTMLInputElement>| string) => {
-    const newValue = typeof event === 'string' ? event : event.target.value;
-    onChange(newValue);
-  }, [onChange]);
+  const handleChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    props.onChange(event.target.value);
+  }, []);
 
   const handlePopup = useCallback(async () => {
-    const newValue = await commonDialogService.open(EditorDialog, value);
-    if (typeof newValue === 'string') {
-      handleChange(newValue);
-      onSave();
-    } else if (onReject) {
-      onReject();
+    const newValue = await commonDialogService.open(EditorDialog, props.value);
+    if (newValue === DialogueStateResult.Rejected || newValue === DialogueStateResult.Resolved) {
+      props.onReject?.();
+    } else {
+      props.onChange(newValue);
+      props.onSave();
     }
-  }, [value, commonDialogService, onSave, onReject, handleChange]);
+  }, []);
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      onSave();
+    switch (event.key) {
+      case 'Enter':
+        props.onSave();
+        break;
+      case 'Escape':
+        props.onReject?.();
+        break;
     }
-    if (event.key === 'Esc' && onReject) {
-      onReject();
-    }
-  }, [onSave, onReject]);
+  }, []);
 
   const inputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (autofocus) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, []);
 
+  useImperativeHandle(ref, () => inputRef.current!);
+
   return styled(useStyles(InlineEditorStyles))(
-    <editor as="div" className={className}>
+    <editor as="div" className={className} {...use({ active })}>
       <editor-container as="div">
         <input
           ref={inputRef}
           name={name}
+          lang="en"
           type={type}
           value={value}
           tabIndex={tabIndex}
           placeholder={placeholder}
           autoComplete="off"
+          disabled={disabled}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
         />
@@ -110,9 +128,9 @@ export const InlineEditor = observer(function InlineEditor({
       <editor-actions as="div" {...use({ position: controlsPosition })}>
         {!hideSave && <editor-action as="div" onClick={onSave}><Icon name="apply" viewBox="0 0 12 10" /></editor-action>}
         {!hideCancel && onReject && <editor-action as="div" onClick={onReject}><Icon name="reject" viewBox="0 0 11 11" /></editor-action>}
-        {onUndo && <editor-action as="div" onClick={edited ? onUndo : () => {}} {...use({ disabled: !edited })}><Icon name="reject" viewBox="0 0 11 11" /></editor-action>}
+        {onUndo && <editor-action as="div" onClick={edited ? onUndo : () => {}} {...use({ disabled: !edited })}><Icon name="table-revert-sm" viewBox="0 0 16 16" /></editor-action>}
         {!simple && <editor-action as="div" onClick={handlePopup}><Icon name="edit" viewBox="0 0 13 13" /></editor-action>}
       </editor-actions>
     </editor>
   );
-});
+}, { forwardRef: true });

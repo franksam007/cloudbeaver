@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,9 @@ import org.jkiss.dbeaver.model.meta.Property;
 import org.jkiss.dbeaver.model.navigator.DBNBrowseSettings;
 import org.jkiss.dbeaver.registry.language.PlatformLanguageDescriptor;
 import org.jkiss.dbeaver.registry.language.PlatformLanguageRegistry;
+import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.dbeaver.utils.GeneralUtils;
+import org.jkiss.utils.ArrayUtils;
 import org.jkiss.utils.CommonUtils;
 
 import java.util.ArrayList;
@@ -53,13 +55,29 @@ public class WebServerConfig {
     }
 
     @Property
+    public String getWorkspaceId() {
+        return DBWorkbench.getPlatform().getWorkspace().getWorkspaceId();
+    }
+
+    @Property
+    public String getServerURL() {
+        return CommonUtils.notEmpty(application.getServerURL());
+    }
+
+    @Property
+    public String getRootURI() {
+        return CommonUtils.notEmpty(application.getRootURI());
+    }
+
+    @Property
     public boolean isAnonymousAccessEnabled() {
         return application.getAppConfiguration().isAnonymousAccessEnabled();
     }
 
     @Property
     public boolean isAuthenticationEnabled() {
-        return application.getAppConfiguration().isAuthenticationEnabled();
+        String[] enabledAuthProviders = getEnabledAuthProviders();
+        return enabledAuthProviders == null || !ArrayUtils.isEmpty(enabledAuthProviders);
     }
 
     @Property
@@ -75,6 +93,26 @@ public class WebServerConfig {
     @Property
     public boolean isSupportsWorkspaces() {
         return application.getAppConfiguration().isSupportsUserWorkspaces();
+    }
+
+    @Property
+    public boolean isPublicCredentialsSaveEnabled() {
+        return application.getAppConfiguration().isPublicCredentialsSaveEnabled();
+    }
+
+    @Property
+    public boolean isAdminCredentialsSaveEnabled() {
+        return application.getAppConfiguration().isAdminCredentialsSaveEnabled();
+    }
+
+    @Property
+    public boolean isLicenseRequired() {
+        return application.isLicenseRequired();
+    }
+
+    @Property
+    public boolean isLicenseValid() {
+        return application.isLicenseValid();
     }
 
     @Property
@@ -95,6 +133,11 @@ public class WebServerConfig {
     @Property
     public String getLocalHostAddress() {
         return application.getLocalHostAddress();
+    }
+
+    @Property
+    public String[] getEnabledAuthProviders() {
+        return application.getAppConfiguration().getEnabledAuthProviders();
     }
 
     @Property
@@ -123,7 +166,12 @@ public class WebServerConfig {
 
     @Property
     public DBNBrowseSettings getDefaultNavigatorSettings() {
-        return application.getDefaultNavigatorSettings();
+        return application.getAppConfiguration().getDefaultNavigatorSettings();
+    }
+
+    @Property
+    public WebProductInfo getProductInfo() {
+        return new WebProductInfo();
     }
 
 }

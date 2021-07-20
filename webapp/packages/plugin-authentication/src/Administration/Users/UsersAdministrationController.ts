@@ -1,14 +1,14 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable, computed } from 'mobx';
+import { observable, computed, makeObservable } from 'mobx';
 
-import { AdminUser, AuthProvidersResource, UsersResource } from '@cloudbeaver/core-authentication';
+import { AdminUser, AuthProvidersResource, AUTH_PROVIDER_LOCAL_ID, UsersResource } from '@cloudbeaver/core-authentication';
 import { injectable, IInitializableController } from '@cloudbeaver/core-di';
 import { CommonDialogService, ConfirmationDialog, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
@@ -17,12 +17,12 @@ import { GQLErrorCatcher, resourceKeyList } from '@cloudbeaver/core-sdk';
 
 @injectable()
 export class UsersAdministrationController implements IInitializableController {
-  @observable isDeleting = false;
+  isDeleting = false;
   readonly selectedItems = observable<string, boolean>(new Map());
   readonly expandedItems = observable<string, boolean>(new Map());
   readonly error = new GQLErrorCatcher();
 
-  @computed get users(): AdminUser[] {
+  get users(): AdminUser[] {
     return Array.from(this.usersResource.data.values())
       .sort((a, b) => {
         if (this.usersResource.isNew(a.userId) === this.usersResource.isNew(b.userId)) {
@@ -40,14 +40,14 @@ export class UsersAdministrationController implements IInitializableController {
   }
 
   get isLocalProviderAvailable(): boolean {
-    return this.authProvidersResource.data.some(({ id }) => id === 'local');
+    return this.authProvidersResource.has(AUTH_PROVIDER_LOCAL_ID);
   }
 
   get isLoading(): boolean {
     return this.usersResource.isLoading() || this.isDeleting;
   }
 
-  @computed get itemsSelected(): boolean {
+  get itemsSelected(): boolean {
     return Array.from(this.selectedItems.values()).some(v => v);
   }
 
@@ -56,15 +56,22 @@ export class UsersAdministrationController implements IInitializableController {
     private authProvidersResource: AuthProvidersResource,
     private usersResource: UsersResource,
     private commonDialogService: CommonDialogService,
-  ) { }
+  ) {
+    makeObservable(this, {
+      isDeleting: observable,
+      users: computed,
+      itemsSelected: computed,
+    });
+  }
 
-  init(): void{
-    this.authProvidersResource.load();
+  init(): void {
+    this.authProvidersResource.loadAll();
   }
 
   update = async () => {
     try {
       await this.usersResource.refreshAll();
+      this.notificationService.logSuccess({ title: 'authentication_administration_tools_refresh_success' });
     } catch (exception) {
       if (!this.error.catch(exception)) {
         this.notificationService.logException(exception, 'Users update failed');

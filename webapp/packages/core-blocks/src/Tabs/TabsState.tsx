@@ -1,25 +1,29 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { observer } from 'mobx-react-lite';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useTabState } from 'reakit/Tab';
 
-import { Executor, IExecutorHandler } from '@cloudbeaver/core-executor';
-import { MetadataMap } from '@cloudbeaver/core-utils';
+import { Executor, ExecutorInterrupter, IExecutorHandler } from '@cloudbeaver/core-executor';
+import { MetadataMap, MetadataValueGetter } from '@cloudbeaver/core-utils';
 
-import { TabsContainer } from './TabsContainer';
-import { TabsContext, ITabsContext, ITabData } from './TabsContext';
+import { useObjectRef } from '../useObjectRef';
+import type { ITabData, ITabsContainer } from './TabsContainer/ITabsContainer';
+import { TabsContext, ITabsContext } from './TabsContext';
 
-type Props<T = Record<string, any>> = T & React.PropsWithChildren<{
+type ExtractContainerProps<T> = T extends void ? Record<string, any> : T;
+
+type Props<T = Record<string, any>> = ExtractContainerProps<T> & React.PropsWithChildren<{
   selectedId?: string;
   orientation?: 'horizontal' | 'vertical';
   currentTabId?: string | null;
-  container?: TabsContainer<T>;
+  container?: ITabsContainer<T, any>;
   localState?: MetadataMap<string, any>;
   lazy?: boolean;
   manual?: boolean;
@@ -27,7 +31,7 @@ type Props<T = Record<string, any>> = T & React.PropsWithChildren<{
   onClose?: (tab: ITabData<T>) => void;
 }>;
 
-export function TabsState<T = Record<string, any>>({
+export const TabsState = observer(function TabsState<T = Record<string, any>>({
   selectedId,
   orientation,
   currentTabId,
@@ -40,16 +44,21 @@ export function TabsState<T = Record<string, any>>({
   onClose,
   ...rest
 }: Props<T>): React.ReactElement | null {
+  const props = rest as any as T;
   if (
     !selectedId
-    && !currentTabId
+    && currentTabId === undefined
     && container
-    && container.tabInfoList.length > 0
   ) {
-    selectedId = container.tabInfoList[0].key;
+    const displayed = container.getDisplayed(props);
+
+    if (displayed.length > 0) {
+      selectedId = displayed[0].key;
+    }
   }
 
-  const tabsState = useMemo(() => localState || new MetadataMap<string, any>(), [localState]);
+  const [localTabsState] = useState(() => new MetadataMap<string, any>());
+  const tabsState = localState || localTabsState;
   const [closeExecutor] = useState(() => new Executor<ITabData<T>>());
   const [openExecutor] = useState(() => new Executor<ITabData<T>>());
 
@@ -59,34 +68,39 @@ export function TabsState<T = Record<string, any>>({
     manual,
   });
 
-  const dynamic = useRef({
+  const dynamic = useObjectRef({
     open: onOpen,
     close: onClose,
-    props: rest as T,
+    props,
+    tabsState,
+    container,
+    state,
     selectedId: selectedId || currentTabId,
+  }, {
+    open: onOpen,
+    close: onClose,
+    props,
+    tabsState,
+    container,
     state,
   });
 
-  dynamic.current.open = onOpen;
-  dynamic.current.close = onClose;
-  dynamic.current.props = rest as T;
-  dynamic.current.state = state;
-
-  if (currentTabId) {
+  if (currentTabId !== undefined) {
     state.selectedId = currentTabId;
+    dynamic.selectedId = currentTabId;
   }
 
   useEffect(() => {
-    const openHandler: IExecutorHandler<ITabData<T>> = data => {
-      dynamic.current.open?.(data);
-      if (dynamic.current.selectedId === data.tabId) {
-        return false;
+    const openHandler: IExecutorHandler<ITabData<T>> = (data, contexts) => {
+      dynamic.open?.(data);
+      if (dynamic.selectedId === data.tabId) {
+        ExecutorInterrupter.interrupt(contexts);
+        return;
       }
-      dynamic.current.selectedId = data.tabId;
-      dynamic.current.state.setSelectedId(data.tabId);
-      return undefined;
+      dynamic.selectedId = data.tabId;
+      dynamic.state.setSelectedId(data.tabId);
     };
-    const closeHandler: IExecutorHandler<ITabData<T>> = data => dynamic.current.close?.(data);
+    const closeHandler: IExecutorHandler<ITabData<T>> = data => dynamic.close?.(data);
 
     openExecutor.addHandler(openHandler);
     closeExecutor.addHandler(closeHandler);
@@ -99,30 +113,45 @@ export function TabsState<T = Record<string, any>>({
   }, []);
 
   useEffect(() => {
+    if (currentTabId !== undefined) {
+      return;
+    }
+
     openExecutor.execute({
       tabId: state.selectedId!,
-      props: rest as T,
+      props,
     });
   }, [state.selectedId]);
 
   const handleOpen = useCallback((tabId: string) => openExecutor.execute({
     tabId,
-    props: dynamic.current.props,
-  }), [openExecutor]);
+    props: dynamic.props,
+  }), []);
 
   const handleClose = useCallback((tabId: string) => closeExecutor.execute({
     tabId,
-    props: dynamic.current.props,
-  }), [closeExecutor]);
+    props: dynamic.props,
+  }), []);
+
+  const getTabInfo = useCallback((tabId: string) => dynamic.container?.getTabInfo(tabId), []);
+  const getTabState = useCallback(
+    (tabId: string, valueGetter?: MetadataValueGetter<string, any>) => dynamic.container?.getTabState(
+      dynamic.tabsState,
+      tabId,
+      dynamic.props,
+      valueGetter
+    ), []);
 
   const value = useMemo<ITabsContext<T>>(() => ({
     state,
     tabsState,
-    props: rest as T,
+    props,
     container,
     openExecutor,
     closeExecutor,
     lazy,
+    getTabInfo,
+    getTabState,
     open: handleOpen,
     close: handleClose,
   }), [
@@ -133,6 +162,8 @@ export function TabsState<T = Record<string, any>>({
     closeExecutor,
     openExecutor,
     lazy,
+    getTabInfo,
+    getTabState,
     handleClose,
     handleOpen,
   ]);
@@ -142,4 +173,4 @@ export function TabsState<T = Record<string, any>>({
       {children}
     </TabsContext.Provider>
   );
-}
+});

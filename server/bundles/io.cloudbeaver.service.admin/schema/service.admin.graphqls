@@ -26,12 +26,15 @@ type AdminUserInfo {
     grantedRoles: [ID!]!
     grantedConnections: [AdminConnectionGrantInfo!]!
 
-    origin: ObjectOrigin!
+    origins: [ObjectOrigin!]!
+
+    linkedAuthProviders: [String!]!
 }
 
 type AdminRoleInfo {
     roleId: ID!
     roleName: String
+    description: String
 
     rolePermissions: [ID]!
 }
@@ -47,6 +50,7 @@ type AdminPermissionInfo {
 
 input ServerConfigInput {
     serverName: String
+    serverURL: String
 
     adminName: String
     adminPassword: String
@@ -54,6 +58,10 @@ input ServerConfigInput {
     anonymousAccessEnabled: Boolean
     authenticationEnabled: Boolean
     customConnectionsEnabled: Boolean
+    publicCredentialsSaveEnabled: Boolean
+    adminCredentialsSaveEnabled: Boolean
+
+    enabledAuthProviders: [ID!]
 
     sessionExpireTime: Int
 }
@@ -69,7 +77,8 @@ extend type Query {
     createUser(userId: ID!): AdminUserInfo!
     deleteUser(userId: ID!): Boolean
 
-    createRole(roleId: ID!): AdminRoleInfo!
+    createRole(roleId: ID!, roleName: String, description: String): AdminRoleInfo!
+    updateRole(roleId: ID!, roleName: String, description: String): AdminRoleInfo!
     deleteRole(roleId: ID!): Boolean
 
     grantUserRole(userId: ID!, roleId: ID!): Boolean
@@ -82,12 +91,12 @@ extend type Query {
     #### Connection management
 
     # All connection configurations
-    allConnections: [ ConnectionInfo! ]!
+    allConnections( id: ID ): [ ConnectionInfo! ]!
 
     searchConnections( hostNames: [String!]! ): [AdminConnectionSearchInfo!]!
 
     createConnectionConfiguration( config: ConnectionConfig! ): ConnectionInfo!
-    copyConnectionConfiguration( nodePath: String! ): ConnectionInfo!
+    copyConnectionConfiguration( nodePath: String!, config: ConnectionConfig ): ConnectionInfo!
     updateConnectionConfiguration( id: ID!, config: ConnectionConfig! ): ConnectionInfo!
     deleteConnectionConfiguration( id: ID! ): Boolean
 

@@ -2,6 +2,9 @@ query serverConfig {
   serverConfig {
     name
     version
+    workspaceId
+    serverURL
+    rootURI
     productConfiguration
     supportsCustomConnections
     supportsConnectionBrowser
@@ -9,11 +12,17 @@ query serverConfig {
     sessionExpireTime
 
     anonymousAccessEnabled
-    authenticationEnabled
+
+    adminCredentialsSaveEnabled
+    publicCredentialsSaveEnabled
+
+    licenseRequired
+    licenseValid
 
     configurationMode
     developmentMode
 
+    enabledAuthProviders
     supportedLanguages {
       isoCode
       displayName
@@ -21,13 +30,16 @@ query serverConfig {
     }
     productConfiguration
     defaultNavigatorSettings {
-      showSystemObjects
-      showUtilityObjects
-      showOnlyEntities
-      mergeEntities
-      hideFolders
-      hideSchemas
-      hideVirtualModel
+      ...AllNavigatorSettings
+    }
+    productInfo {
+      id
+      version
+      name
+      description
+      buildTime
+      releaseTime
+      licenseInfo
     }
   }
 }

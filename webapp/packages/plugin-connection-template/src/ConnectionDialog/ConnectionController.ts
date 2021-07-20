@@ -1,21 +1,20 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 
-import {
-  DBDriverResource, Connection, DatabaseAuthModelsResource, ConnectionInfoResource, DBDriver
-} from '@cloudbeaver/core-connections';
+import { DBDriverResource, Connection, DatabaseAuthModelsResource, ConnectionInfoResource, DBDriver, ConnectionInitConfig, getUniqueConnectionName } from '@cloudbeaver/core-connections';
+import type { IFormInitConfig } from '@cloudbeaver/core-connections';
 import { injectable, IInitializableController, IDestructibleController } from '@cloudbeaver/core-di';
 import { CommonDialogService } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { ErrorDetailsDialog } from '@cloudbeaver/core-notifications';
-import { GQLError, DatabaseAuthModel } from '@cloudbeaver/core-sdk';
+import { DatabaseAuthModel, DetailsError } from '@cloudbeaver/core-sdk';
 
 import { TemplateConnectionsResource } from '../TemplateConnectionsResource';
 
@@ -26,7 +25,7 @@ export enum ConnectionStep {
 
 export interface IConnectionController {
   template: Connection | null;
-  credentials: any;
+  config: IFormInitConfig;
   isConnecting: boolean;
   onConnect: () => void;
 }
@@ -34,16 +33,21 @@ export interface IConnectionController {
 @injectable()
 export class ConnectionController
 implements IInitializableController, IDestructibleController, IConnectionController {
-  @observable step = ConnectionStep.ConnectionTemplateSelect;
-  @observable isLoading = true;
-  @observable isConnecting = false;
-  @observable template: Connection | null = null;
-  @observable authModel?: DatabaseAuthModel;
-  @observable credentials: any = { };
-  @observable hasDetails = false;
-  @observable responseMessage: string | null = null;
+  step = ConnectionStep.ConnectionTemplateSelect;
+  isLoading = true;
+  isConnecting = false;
+  template: Connection | null = null;
+  authModel?: DatabaseAuthModel;
+  config: IFormInitConfig = {
+    credentials: {},
+    networkCredentials: [],
+    saveCredentials: false,
+  };
 
-  private exception: GQLError | null = null;
+  hasDetails = false;
+  responseMessage: string | null = null;
+
+  private exception: DetailsError | null = null;
   private onClose!: () => void;
   private isDistructed = false;
 
@@ -69,7 +73,18 @@ implements IInitializableController, IDestructibleController, IConnectionControl
     private notificationService: NotificationService,
     private commonDialogService: CommonDialogService,
     private dbAuthModelsResource: DatabaseAuthModelsResource
-  ) { }
+  ) {
+    makeObservable(this, {
+      step: observable,
+      isLoading: observable,
+      isConnecting: observable,
+      template: observable,
+      authModel: observable,
+      config: observable,
+      hasDetails: observable,
+      responseMessage: observable,
+    });
+  }
 
   init(onClose: () => void): void {
     this.onClose = onClose;
@@ -97,12 +112,14 @@ implements IInitializableController, IDestructibleController, IConnectionControl
     this.isConnecting = true;
     this.clearError();
     try {
-      const connection = await this.connectionInfoResource.createFromTemplate(this.template.id);
+      const connectionNames = this.connectionInfoResource.values.map(connection => connection.name);
+      const uniqueConnectionName = getUniqueConnectionName(this.template.name || 'Template connection', connectionNames);
+      const connection = await this.connectionInfoResource.createFromTemplate(this.template.id, uniqueConnectionName);
 
       try {
-        await this.connectionInfoResource.init(connection.id, this.credentials);
+        await this.connectionInfoResource.init(this.getConfig(connection.id));
 
-        this.notificationService.logSuccess({ title: `Connection ${connection.name} established` });
+        this.notificationService.logSuccess({ title: 'Connection is established', message: connection.name });
         this.onClose();
       } catch (exception) {
         this.showError(exception, 'Failed to establish connection');
@@ -120,7 +137,11 @@ implements IInitializableController, IDestructibleController, IConnectionControl
 
     await this.loadAuthModel();
     this.clearError();
-    this.credentials = {};
+    this.config = {
+      credentials: {},
+      networkCredentials: [],
+      saveCredentials: false,
+    };
 
     this.step = ConnectionStep.Connection;
     if (!this.authModel) {
@@ -134,6 +155,23 @@ implements IInitializableController, IDestructibleController, IConnectionControl
     }
   };
 
+  private getConfig(connectionId: string) {
+    const config: ConnectionInitConfig = {
+      id: connectionId,
+    };
+
+    if (Object.keys(this.config.credentials).length > 0) {
+      config.credentials = this.config.credentials;
+      config.saveCredentials = this.config.saveCredentials;
+    }
+
+    if (this.config.networkCredentials.length > 0) {
+      config.networkCredentials = this.config.networkCredentials;
+    }
+
+    return config;
+  }
+
   private clearError() {
     this.responseMessage = null;
     this.hasDetails = false;
@@ -141,8 +179,8 @@ implements IInitializableController, IDestructibleController, IConnectionControl
   }
 
   private showError(exception: Error, message: string) {
-    if (exception instanceof GQLError && !this.isDistructed) {
-      this.responseMessage = exception.errorText;
+    if (exception instanceof DetailsError && !this.isDistructed) {
+      this.responseMessage = exception.errorMessage;
       this.hasDetails = exception.hasDetails();
       this.exception = exception;
     } else {

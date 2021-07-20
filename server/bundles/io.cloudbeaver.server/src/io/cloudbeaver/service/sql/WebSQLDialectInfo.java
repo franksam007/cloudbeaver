@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,10 @@ package io.cloudbeaver.service.sql;
 
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPDataSource;
+import org.jkiss.dbeaver.model.exec.plan.DBCQueryPlanner;
 import org.jkiss.dbeaver.model.sql.SQLDialect;
+import org.jkiss.dbeaver.model.sql.SQLUtils;
+import org.jkiss.dbeaver.utils.GeneralUtils;
 import org.jkiss.utils.Pair;
 
 /**
@@ -77,7 +80,10 @@ public class WebSQLDialectInfo {
     }
 
     public String getScriptDelimiter() {
-        return dialect.getScriptDelimiter();
+        return SQLUtils.getDefaultScriptDelimiter(dialect);
     }
 
+    public boolean isSupportsExplainExecutionPlan() {
+        return GeneralUtils.adapt(dataSource, DBCQueryPlanner.class) != null;
+    }
 }

@@ -1,25 +1,26 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
+import { observer } from 'mobx-react-lite';
 import { useContext } from 'react';
 import { TabList as BaseTabList, TabListOptions, TabStateReturn } from 'reakit/Tab';
 
-import { DynamicStyle } from '@cloudbeaver/core-theming';
+import type { ComponentStyle } from '@cloudbeaver/core-theming';
 
 import { TabDefault } from './Tab/TabDefault';
 import { TabsContext } from './TabsContext';
 
 type Props = React.PropsWithChildren<Omit<TabListOptions, keyof TabStateReturn>> & {
-  style?: DynamicStyle[] | DynamicStyle;
+  style?: ComponentStyle;
   childrenFirst?: boolean;
 };
 
-export const TabList: React.FC<Props> = function TabList({
+export const TabList: React.FC<Props> = observer(function TabList({
   style,
   children,
   childrenFirst,
@@ -45,7 +46,7 @@ export const TabList: React.FC<Props> = function TabList({
             component={tabInfo.tab?.()}
             {...state.props}
             style={style}
-            disabled={tabInfo.isDisabled?.(tabInfo.key, state.props)}
+            disabled={props.disabled || tabInfo.isDisabled?.(tabInfo.key, state.props)}
             onOpen={tabInfo.onOpen}
             onClose={tabInfo.onClose}
           />
@@ -56,4 +57,4 @@ export const TabList: React.FC<Props> = function TabList({
   }
 
   return <BaseTabList {...props} {...state.state}>{children}</BaseTabList>;
-};
+});

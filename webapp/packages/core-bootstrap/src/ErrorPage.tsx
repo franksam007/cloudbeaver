@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -10,7 +10,7 @@ import { useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import styled, { css } from 'reshadow';
 
-import { useAppLoadingSreen } from '@cloudbeaver/core-blocks';
+import { useAppLoadingScreen } from '@cloudbeaver/core-blocks';
 
 interface IRefreshProps {
   className?: string;
@@ -51,7 +51,7 @@ const ERROR_PAGE_STYLES = css`
 `;
 
 function Refresh({ className }: IRefreshProps) {
-  useAppLoadingSreen();
+  useAppLoadingScreen();
 
   const handleRefresh = useCallback(() => window.location.reload(), []);
   return <button className={className} onClick={handleRefresh}>Refresh</button>;

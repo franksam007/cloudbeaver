@@ -1,13 +1,13 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
 import { computed } from 'mobx';
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import { useMemo } from 'react';
 import styled, { use } from 'reshadow';
 
@@ -15,7 +15,7 @@ import { Icon } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { MenuTrigger } from '@cloudbeaver/core-dialogs';
 
-import { NavNode } from '../../../shared/NodesManager/EntityTypes';
+import type { NavNode } from '../../../shared/NodesManager/EntityTypes';
 import { NavigationTreeContextMenuService } from '../../NavigationTreeContextMenuService';
 import { treeNodeMenuStyles } from './treeNodeMenuStyles';
 
@@ -45,7 +45,7 @@ export const TreeNodeMenu = observer(function TreeNodeMenu({
   }
 
   return styled(treeNodeMenuStyles)(
-    <MenuTrigger panel={menuPanel} {...use({ selected })}>
+    <MenuTrigger panel={menuPanel} {...use({ selected })} modal>
       <Icon name="snack" viewBox="0 0 16 10" />
     </MenuTrigger>
   );

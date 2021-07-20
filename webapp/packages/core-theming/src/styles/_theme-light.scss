@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,17 +8,44 @@
 
 $mdc-theme-primary: #2a7cb4; // main menu background
 $mdc-theme-on-primary: #ffffff; // main text color
-$mdc-theme-secondary: #f1f1f1;
+$mdc-theme-secondary: #f2f2f2;
 $mdc-theme-on-secondary: #6d6d6d;
 $mdc-theme-surface: #ffffff;
-$mdc-theme-on-surface: #6d6d6d;
+$mdc-theme-on-surface: #353535;
 $mdc-theme-background: #dedede;
 
-$color-positive: #01cca3;
+$color-positive: #52c41a;
 $color-on-positive: #fff;
-$color-negative: #fd1d48;
-$input-border-color: #dedede;
+$color-negative: #e73e52;
+$color-status: #ff9900;
 
-$theme-name: 'light';
+$link-color: $mdc-theme-primary;
+$link-color-focus: #3f96d1;
 
-@import 'mixins';
+$input-border: #d9d9d9;
+$input-border-disabled: $input-border;
+$input-border-readonly: $input-border;
+$input-background: $mdc-theme-surface;
+$input-background-disabled: #e9e9e9;
+$input-background-readonly: #e9e9e9;
+
+$mdc-theme-text-colors: (
+  light: (
+    primary: white,
+    secondary: rgba(white, 0.7),
+    hint: rgba(white, 0.45),
+    disabled: rgba(white, 0.45),
+    icon: rgba(white, 0.45),
+  ),
+  dark: (
+    primary: rgba(black, 0.87),
+    secondary: rgba(black, 0.45),
+    hint: rgba(black, 0.45),
+    disabled: rgba(black, 0.2),
+    icon: rgba(black, 0.38),
+  ),
+);
+
+$theme-name: "light";
+
+@import "mixins";

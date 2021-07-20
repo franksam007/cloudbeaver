@@ -1,72 +1,120 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { TabProps } from '@cloudbeaver/core-blocks';
+import type { TabProps } from '@cloudbeaver/core-blocks';
 import { injectable } from '@cloudbeaver/core-di';
-import { ResultDataFormat } from '@cloudbeaver/core-sdk';
+import type { ResultDataFormat } from '@cloudbeaver/core-sdk';
 
-import { IDatabaseDataModel } from './DatabaseDataModel/IDatabaseDataModel';
+import type { IDatabaseDataModel } from './DatabaseDataModel/IDatabaseDataModel';
+import type { IDatabaseDataResult } from './DatabaseDataModel/IDatabaseDataResult';
+import type { IDataTableActions } from './TableViewer/IDataTableActions';
 
-export interface IDataPresentationProps {
-  model: IDatabaseDataModel<any>;
+export interface IDataPresentationProps<
+  TOptions = any,
+  TResult extends IDatabaseDataResult = IDatabaseDataResult
+> {
+  dataFormat: ResultDataFormat;
+  model: IDatabaseDataModel<TOptions, TResult>;
+  actions: IDataTableActions;
+  resultIndex: number;
   className?: string;
 }
 
-export type DataPresentationComponent = React.FunctionComponent<IDataPresentationProps>;
+export enum DataPresentationType {
+  main,
+  toolsPanel
+}
+
+export type DataPresentationComponent<
+  TOptions = any,
+  TResult extends IDatabaseDataResult = IDatabaseDataResult
+> = React.FunctionComponent<IDataPresentationProps<TOptions, TResult>>;
 
 export type PresentationTabProps = TabProps & {
-  presentation: DataPresentationOptions;
+  presentation: IDataPresentationOptions;
   model: IDatabaseDataModel<any>;
 };
+
 export type PresentationTabComponent = React.FunctionComponent<PresentationTabProps>;
 
-export interface DataPresentationOptions {
+export interface IDataPresentationOptions {
   id: string;
-  dataFormat: ResultDataFormat;
+  dataFormat?: ResultDataFormat;
+  type?: DataPresentationType;
   title?: string;
   icon?: string;
+  hidden?: (
+    dataFormat: ResultDataFormat | null,
+    model: IDatabaseDataModel<any>,
+    resultIndex: number
+  ) => boolean;
   getPresentationComponent: () => DataPresentationComponent;
   getTabComponent?: () => PresentationTabComponent;
   onActivate?: () => void;
 }
 
+export interface IDataPresentation extends IDataPresentationOptions {
+  type: DataPresentationType;
+}
+
 @injectable()
 export class DataPresentationService {
-  get default(): DataPresentationOptions | undefined {
-    return this.dataPresentations.values().next().value;
-  }
-
-  private dataPresentations: Map<string, DataPresentationOptions>;
+  private dataPresentations: Map<string, IDataPresentation>;
 
   constructor() {
     this.dataPresentations = new Map();
   }
 
-  get(id: string): DataPresentationOptions | undefined {
+  get(id: string): IDataPresentation | undefined {
     return this.dataPresentations.get(id);
   }
 
-  getSupportedList(dataFormat: ResultDataFormat | ResultDataFormat[]): DataPresentationOptions[] {
-    return Array.from(this.dataPresentations.values())
-      .filter(presentation => presentation.dataFormat === dataFormat || dataFormat.includes(presentation.dataFormat));
+  getSupportedList(
+    type: DataPresentationType,
+    supportedDataFormats: ResultDataFormat[],
+    dataFormat: ResultDataFormat,
+    model: IDatabaseDataModel<any>,
+    resultIndex: number,
+  ): IDataPresentation[] {
+    return Array.from(this.dataPresentations.values()).filter(presentation => {
+      if (presentation.type !== type || presentation.hidden?.(dataFormat, model, resultIndex)) {
+        return false;
+      }
+
+      return presentation.dataFormat === undefined
+        || supportedDataFormats.includes(presentation.dataFormat);
+    });
   }
 
-  getSupported(dataFormat: ResultDataFormat, presentationId: string | undefined): DataPresentationOptions | null {
+  getSupported(
+    type: DataPresentationType,
+    dataFormat: ResultDataFormat,
+    presentationId: string | undefined,
+    model: IDatabaseDataModel<any>,
+    resultIndex: number,
+  ): IDataPresentation | null {
     if (presentationId) {
       const presentation = this.dataPresentations.get(presentationId);
 
-      if (presentation?.dataFormat === dataFormat) {
+      if (presentation) {
+        if (presentation.hidden?.(dataFormat, model, resultIndex)) {
+          return null;
+        }
         return presentation;
       }
     }
 
     for (const presentation of this.dataPresentations.values()) {
-      if (presentation.dataFormat === dataFormat) {
+      if (
+        (presentation.dataFormat === undefined || presentation.dataFormat === dataFormat)
+        && presentation.type === type
+        && !presentation.hidden?.(dataFormat, model, resultIndex)
+      ) {
         return presentation;
       }
     }
@@ -74,7 +122,13 @@ export class DataPresentationService {
     return null;
   }
 
-  add(options: DataPresentationOptions): void {
-    this.dataPresentations.set(options.id, options);
+  add(options: IDataPresentationOptions): void {
+    this.dataPresentations.set(
+      options.id,
+      {
+        ...options,
+        type: options.type || DataPresentationType.main,
+      }
+    );
   }
 }

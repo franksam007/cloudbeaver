@@ -1,14 +1,17 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { action } from 'mobx';
+import { action, computed, makeObservable, runInAction } from 'mobx';
 
+import { Connection, ConnectionInfoResource } from '@cloudbeaver/core-connections';
 import { injectable } from '@cloudbeaver/core-di';
+import { Executor, IExecutor } from '@cloudbeaver/core-executor';
+import { SessionDataResource } from '@cloudbeaver/core-root';
 import {
   GraphQLService,
   CachedMapResource,
@@ -16,11 +19,15 @@ import {
   isResourceKeyList,
   ResourceKeyList,
   resourceKeyList,
-  NavNodeChildrenQuery as fake, ResourceKeyUtils, ICachedResourceMetadata
+  NavNodeChildrenQuery as fake,
+  ResourceKeyUtils,
+  ICachedMapResourceMetadata
 } from '@cloudbeaver/core-sdk';
 import { MetadataMap } from '@cloudbeaver/core-utils';
 
-import { NavNodeInfoResource } from './NavNodeInfoResource';
+import { CoreSettingsService } from '../../CoreSettingsService';
+import { NavNodeInfoResource, ROOT_NODE_PATH } from './NavNodeInfoResource';
+import { NodeManagerUtils } from './NodeManagerUtils';
 
 // TODO: so much dirty
 export interface NodePath {
@@ -29,28 +36,65 @@ export interface NodePath {
 
 type NavNodeChildrenQuery = fake & NodePath;
 
-interface INodeMetadata extends ICachedResourceMetadata {
+interface INodeMetadata extends ICachedMapResourceMetadata {
   withDetails: boolean;
 }
 
 @injectable()
 export class NavTreeResource extends CachedMapResource<string, string[]> {
+  readonly onNodeRefresh: IExecutor<string>;
   protected metadata: MetadataMap<string, INodeMetadata>;
+
+  get childrenLimit(): number {
+    return this.coreSettingsService.settings.getValue('app.navigationTree.childrenLimit');
+  }
 
   constructor(
     private graphQLService: GraphQLService,
-    private navNodeInfoResource: NavNodeInfoResource
+    private navNodeInfoResource: NavNodeInfoResource,
+    private coreSettingsService: CoreSettingsService,
+    private sessionDataResource: SessionDataResource,
+    private connectionInfo: ConnectionInfoResource
   ) {
-    super(new Map());
+    super();
+
+    makeObservable<NavTreeResource, 'setNavObject' | 'connectionRemoveHandler'>(this, {
+      childrenLimit: computed,
+      setDetails: action,
+      setNavObject: action,
+      connectionRemoveHandler: action.bound,
+    });
+
     this.metadata = new MetadataMap<string, INodeMetadata>(() => ({
       outdated: true,
       loading: false,
       withDetails: false,
+      exception: null,
+      includes: [],
     }));
+
+    this.onNodeRefresh = new Executor<string>(null, (a, b) => a === b);
     this.onDataOutdated.addHandler(navNodeInfoResource.markOutdated.bind(navNodeInfoResource));
+    this.sessionDataResource.onDataUpdate.addPostHandler(() => this.markOutdated());
+    this.connectionInfo.onItemAdd.addHandler(this.connectionUpdateHandler.bind(this));
+    this.connectionInfo.onItemDelete.addHandler(this.connectionRemoveHandler);
+    this.connectionInfo.onConnectionCreate.addHandler(this.connectionCreateHandler.bind(this));
   }
 
-  @action setDetails(keyObject: ResourceKey<string>, state: boolean): void {
+  async refreshTree(navNodeId: string): Promise<void> {
+    await this.graphQLService.sdk.navRefreshNode({
+      nodePath: navNodeId,
+    });
+    await this.markTreeOutdated(navNodeId);
+    await this.refresh(navNodeId);
+    await this.onNodeRefresh.execute(navNodeId);
+  }
+
+  async markTreeOutdated(navNodeId: ResourceKey<string>): Promise<void> {
+    await this.markOutdated(resourceKeyList(this.getNestedChildren(navNodeId)));
+  }
+
+  setDetails(keyObject: ResourceKey<string>, state: boolean): void {
     ResourceKeyUtils.forEach(keyObject, key => {
       const children = resourceKeyList(this.getNestedChildren(key));
       this.navNodeInfoResource.setDetails(children, state);
@@ -118,7 +162,7 @@ export class NavTreeResource extends CachedMapResource<string, string[]> {
   set(keyObject: ResourceKey<string>, valueObject: string[] | string[][]): void {
     ResourceKeyUtils.forEach(keyObject, (key, i) => {
       const value = i === -1 ? (valueObject as string[]) : (valueObject as string[][])[i];
-      const childrenToRemove = this.data.get(key)?.concat() || [];
+      const childrenToRemove = this.data.get(key) || [];
       this.data.set(key, value);
       this.delete(resourceKeyList(childrenToRemove.filter(navNodeId => !value.includes(navNodeId))));
     });
@@ -142,7 +186,7 @@ export class NavTreeResource extends CachedMapResource<string, string[]> {
     const allKeys = resourceKeyList(items);
     this.markUpdated(allKeys);
     this.onItemDelete.execute(allKeys);
-    this.navNodeInfoResource.delete(resourceKeyList(items.filter(navNodeId => navNodeId !== key)));
+    this.navNodeInfoResource.delete(ResourceKeyUtils.exclude(allKeys, key));
   }
 
   protected async loader(key: ResourceKey<string>): Promise<Map<string, string[]>> {
@@ -165,7 +209,7 @@ export class NavTreeResource extends CachedMapResource<string, string[]> {
     if (isResourceKeyList(navNode)) {
       prevChildren = navNode.list.concat();
     } else {
-      prevChildren = [navNode, ...(this.get(navNode)?.concat() || [])];
+      prevChildren = [navNode, ...(this.get(navNode) || [])];
     }
     nestedChildren.push(...prevChildren);
 
@@ -177,6 +221,50 @@ export class NavTreeResource extends CachedMapResource<string, string[]> {
     }
 
     return nestedChildren;
+  }
+
+  private async connectionUpdateHandler(key: ResourceKey<string>) {
+    await this.markOutdated(ROOT_NODE_PATH);
+
+    await ResourceKeyUtils.forEachAsync(key, async key => {
+      const nodeId = NodeManagerUtils.connectionIdToConnectionNodeId(key);
+
+      if (this.has(nodeId)) {
+        const connectionInfo = this.connectionInfo.get(key);
+
+        if (!connectionInfo?.connected) {
+          this.delete(nodeId);
+        } else {
+          await this.markTreeOutdated(nodeId);
+        }
+      }
+
+      const node = this.navNodeInfoResource.get(nodeId);
+
+      if (node) {
+        await this.markOutdated(node.parentId);
+      }
+    });
+  }
+
+  private connectionRemoveHandler(key: ResourceKey<string>) {
+    runInAction(() => {
+      ResourceKeyUtils.forEach(key, key => {
+        const nodeId = NodeManagerUtils.connectionIdToConnectionNodeId(key);
+
+        const node = this.navNodeInfoResource.get(nodeId);
+
+        if (node) {
+          this.deleteInNode(node.parentId, [nodeId]);
+        }
+      });
+    });
+  }
+
+  private async connectionCreateHandler(connection: Connection) {
+    const nodeId = NodeManagerUtils.connectionIdToConnectionNodeId(connection.id);
+    await this.markOutdated(ROOT_NODE_PATH);
+    await this.markTreeOutdated(nodeId);
   }
 
   private setNavObject(data: NavNodeChildrenQuery | NavNodeChildrenQuery[]) {
@@ -233,6 +321,8 @@ export class NavTreeResource extends CachedMapResource<string, string[]> {
       withDetails: metadata.withDetails,
     });
 
-    return { navNodeChildren, navNodeInfo, parentPath };
+    navNodeInfo.hasChildren = navNodeInfo.hasChildren && navNodeChildren.length > 0;
+
+    return { navNodeChildren: navNodeChildren.slice(0, this.childrenLimit), navNodeInfo, parentPath };
   }
 }

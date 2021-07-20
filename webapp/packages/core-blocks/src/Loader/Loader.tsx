@@ -1,11 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
+import { observer } from 'mobx-react-lite';
 import { useState, useEffect } from 'react';
 import styled, { use } from 'reshadow';
 
@@ -13,7 +14,15 @@ import { Translate } from '@cloudbeaver/core-localization';
 import { useStyles } from '@cloudbeaver/core-theming';
 
 import { Button } from '../Button';
+import { StaticImage } from '../StaticImage';
 import { loaderStyles, overlayStyles } from './loaderStyles';
+
+type LoaderState = {
+  isLoading: () => boolean;
+  isLoaded: () => boolean;
+} | {
+  loading: boolean;
+};
 
 interface Props {
   /** if false, nothing will be rendered, by default true */
@@ -31,6 +40,8 @@ interface Props {
   small?: boolean;
   className?: string;
   fullSize?: boolean;
+  state?: LoaderState | LoaderState[];
+  children?: () => React.ReactNode;
   onCancel?: () => void;
 }
 
@@ -39,7 +50,8 @@ const spinnerType = {
   secondary: '/icons/spinner.svg',
 };
 
-export const Loader: React.FC<Props> = function Loader({
+// @ts-expect-error wtf error
+export const Loader: React.FC<Props> = observer(function Loader({
   cancelDisabled,
   overlay,
   message,
@@ -49,8 +61,29 @@ export const Loader: React.FC<Props> = function Loader({
   fullSize,
   className,
   loading = true,
+  state,
+  children,
   onCancel,
 }) {
+  let loaded = !loading;
+  if (state) {
+    state = Array.isArray(state) ? state : [state];
+
+    for (const element of state) {
+      if ('loading' in element) {
+        loading = element.loading;
+        loaded = !loading;
+      } else {
+        if ('isLoaded' in element) {
+          loaded = element.isLoaded();
+        }
+        if ('isLoading' in element) {
+          loading = element.isLoading();
+        }
+      }
+    }
+  }
+
   const style = useStyles(loaderStyles, overlay && overlayStyles);
   const [isVisible, setVisible] = useState(loading);
   const spinnerURL = (secondary || overlay) ? spinnerType.secondary : spinnerType.primary;
@@ -67,13 +100,23 @@ export const Loader: React.FC<Props> = function Loader({
     return () => clearTimeout(id);
   }, [loading]);
 
-  if (!isVisible) {
+  if (children) {
+    if (loaded) {
+      return children();
+    }
+
+    if (!loading) {
+      return null;
+    }
+  }
+
+  if ((!isVisible && overlay) || !loading) {
     return null;
   }
 
   return styled(style)(
     <loader as="div" className={className} {...use({ small, fullSize })}>
-      <icon as="div"><img src={spinnerURL} /></icon>
+      <icon as="div"><StaticImage icon={spinnerURL} /></icon>
       {!hideMessage && <message as="div"><Translate token={message || 'ui_processing_loading'} /></message>}
       {onCancel && (
         <actions as='div'>
@@ -88,4 +131,4 @@ export const Loader: React.FC<Props> = function Loader({
       )}
     </loader>
   );
-};
+});

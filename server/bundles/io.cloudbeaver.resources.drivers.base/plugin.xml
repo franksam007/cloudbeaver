@@ -2,8 +2,10 @@
 <plugin>
     <!-- Resource mappings -->
     <extension point="org.jkiss.dbeaver.resources">
+        <resource name="drivers/db2"/>
         <resource name="drivers/mysql/mysql8"/>
         <resource name="drivers/mariadb"/>
+        <resource name="drivers/oracle"/>
         <resource name="drivers/postgresql"/>
         <resource name="drivers/clickhouse"/>
         <resource name="drivers/derby"/>
@@ -11,12 +13,15 @@
         <resource name="drivers/h2"/>
         <resource name="drivers/sqlite/xerial"/>
         <resource name="drivers/mssql/new"/>
+        <resource name="drivers/trino"/>
     </extension>
 
     <!-- Bundles  -->
     <extension point="org.jkiss.dbeaver.product.bundles">
+        <bundle id="drivers.db2" label="DB2 drivers"/>
         <bundle id="drivers.mysql" label="MySQL drivers"/>
         <bundle id="drivers.mariadb" label="MariaDB drivers"/>
+        <bundle id="drivers.oracle" label="Oracle drivers"/>
         <bundle id="drivers.postgresql" label="PostgreSQL drivers"/>
         <bundle id="drivers.clickhouse" label="Clickhouse drivers"/>
         <bundle id="drivers.derby" label="Derby drivers"/>
@@ -24,12 +29,15 @@
         <bundle id="drivers.h2" label="H2 drivers"/>
         <bundle id="drivers.sqlite.xerial" label="SQLite drivers"/>
         <bundle id="drivers.mssql.new" label="SQL Server drivers"/>
+        <bundle id="drivers.trino" label="Trino drivers"/>
     </extension>
 
     <!-- Enabled drivers -->
     <extension point="io.cloudbeaver.driver">
+        <driver id="db2:db2"/>
         <driver id="mysql:mysql8"/>
         <driver id="mysql:mariaDB"/>
+        <driver id="oracle:oracle_thin"/>
         <driver id="postgresql:postgres-jdbc"/>
         <driver id="jaybird:jaybird"/>
         <driver id="generic:yandex_clickhouse"/>
@@ -37,6 +45,7 @@
         <driver id="generic:h2_embedded"/>
         <driver id="generic:sqlite_jdbc"/>
         <driver id="sqlserver:microsoft"/>
+        <driver id="generic:trino_jdbc"/>
     </extension>
 
 

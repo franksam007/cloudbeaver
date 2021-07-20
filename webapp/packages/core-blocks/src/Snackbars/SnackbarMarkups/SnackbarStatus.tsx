@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ interface SnackbarStatusProps {
 export const SnackbarStatus: React.FC<SnackbarStatusProps> = function SnackbarStatus({ status, className }) {
   return styled(SNACKBAR_STATUS_STYLES)(
     status === ENotificationType.Loading ? (
-      <loader-container className={className} as='div'>
+      <loader-container className={className}>
         <Loader fullSize hideMessage />
       </loader-container>
     ) : <NotificationMark className={className} type={status} />);

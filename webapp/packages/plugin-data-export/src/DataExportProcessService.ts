@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,12 +8,12 @@
 
 import { injectable } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
-import { GraphQLService, DataTransferParameters, EnvironmentService } from '@cloudbeaver/core-sdk';
-import { Deferred, OrderedMap } from '@cloudbeaver/core-utils';
+import { GraphQLService, DataTransferParameters } from '@cloudbeaver/core-sdk';
+import { Deferred, GlobalConstants, OrderedMap } from '@cloudbeaver/core-utils';
 
 import { ExportFromContainerProcess } from './ExportFromContainerProcess';
 import { ExportFromResultsProcess } from './ExportFromResultsProcess';
-import { IExportContext } from './IExportContext';
+import type { IExportContext } from './IExportContext';
 
 interface Process {
   taskId: string;
@@ -33,8 +33,7 @@ export class DataExportProcessService {
 
   constructor(
     private graphQLService: GraphQLService,
-    private notificationService: NotificationService,
-    private environmentService: EnvironmentService
+    private notificationService: NotificationService
   ) { }
 
   async cancel(exportId: string): Promise<void> {
@@ -83,7 +82,7 @@ export class DataExportProcessService {
     if (!dataFileId) {
       return;
     }
-    return `${this.environmentService.staticEndpoint}/data/${dataFileId}`;
+    return GlobalConstants.absoluteServiceUrl('/data/', dataFileId);
   }
 
   async exportData(

@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -8,13 +8,14 @@
 
 import { Container } from 'inversify';
 
-import { IServiceCollection, IServiceConstructor, IServiceInjector } from './IApp';
-import { InjectionToken } from './InjectionToken';
+import type { IServiceCollection, IServiceConstructor, IServiceInjector } from './IApp';
+import type { InjectionToken } from './InjectionToken';
 import { isConstructor } from './isConstructor';
 
 export class DIContainer implements IServiceInjector, IServiceCollection {
   protected container = new Container({
     defaultScope: 'Singleton',
+    skipBaseClassChecks: true,
   });
 
   private parent: DIContainer | null = null;
@@ -25,12 +26,12 @@ export class DIContainer implements IServiceInjector, IServiceCollection {
     }
   }
 
-  bindWithParent(parent: DIContainer) {
+  bindWithParent(parent: DIContainer): void {
     this.container.parent = parent.container;
     this.parent = parent;
   }
 
-  unbindParent() {
+  unbindParent(): void {
     this.container.parent = null;
     this.parent = null;
   }

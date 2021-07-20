@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,14 +19,19 @@ package io.cloudbeaver.service.admin;
 import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.WebServiceUtils;
 import io.cloudbeaver.model.WebConnectionConfig;
+import io.cloudbeaver.server.CBApplication;
 import io.cloudbeaver.service.DBWBindingContext;
+import io.cloudbeaver.service.DBWServiceBindingServlet;
 import io.cloudbeaver.service.WebServiceBindingBase;
+import io.cloudbeaver.service.admin.impl.WebAdminLogsServlet;
 import io.cloudbeaver.service.admin.impl.WebServiceAdmin;
+import org.eclipse.jetty.servlet.ServletContextHandler;
+import org.eclipse.jetty.servlet.ServletHolder;
 
 /**
  * Web service implementation
  */
-public class WebServiceBindingAdmin extends WebServiceBindingBase<DBWServiceAdmin> {
+public class WebServiceBindingAdmin extends WebServiceBindingBase<DBWServiceAdmin> implements DBWServiceBindingServlet {
 
     private static final String SCHEMA_FILE_NAME = "schema/service.admin.graphqls";
 
@@ -48,7 +53,17 @@ public class WebServiceBindingAdmin extends WebServiceBindingBase<DBWServiceAdmi
             .dataFetcher("deleteUser",
                 env -> getService(env).deleteUser(getWebSession(env), env.getArgument("userId")))
             .dataFetcher("createRole",
-                env -> getService(env).createRole(getWebSession(env), env.getArgument("roleId")))
+                env -> getService(env).createRole(
+                    getWebSession(env),
+                    env.getArgument("roleId"),
+                    env.getArgument("roleName"),
+                    env.getArgument("description")))
+            .dataFetcher("updateRole",
+                env -> getService(env).createRole(
+                    getWebSession(env),
+                    env.getArgument("roleId"),
+                    env.getArgument("roleName"),
+                    env.getArgument("description")))
             .dataFetcher("deleteRole",
                 env -> getService(env).deleteRole(getWebSession(env), env.getArgument("roleId")))
 
@@ -61,13 +76,13 @@ public class WebServiceBindingAdmin extends WebServiceBindingBase<DBWServiceAdmi
         .dataFetcher("setUserCredentials",
             env -> getService(env).setUserCredentials(getWebSession(env), env.getArgument("userId"), env.getArgument("providerId"), env.getArgument("credentials")))
 
-        .dataFetcher("allConnections", env -> getService(env).getAllConnections(getWebSession(env)))
+        .dataFetcher("allConnections", env -> getService(env).getAllConnections(getWebSession(env), env.getArgument("id")))
         .dataFetcher("searchConnections", env -> getService(env).searchConnections(getWebSession(env), env.getArgument("hostNames")))
 
         .dataFetcher("createConnectionConfiguration",
             env -> getService(env).createConnectionConfiguration(getWebSession(env), new WebConnectionConfig(env.getArgument("config"))))
         .dataFetcher("copyConnectionConfiguration",
-            env -> getService(env).copyConnectionConfiguration(getWebSession(env), env.getArgument("nodePath")))
+            env -> getService(env).copyConnectionConfiguration(getWebSession(env), env.getArgument("nodePath"), new WebConnectionConfig(env.getArgument("config"))))
         .dataFetcher("updateConnectionConfiguration",
             env -> getService(env).updateConnectionConfiguration(getWebSession(env), env.getArgument("id"), new WebConnectionConfig(env.getArgument("config"))))
         .dataFetcher("deleteConnectionConfiguration",
@@ -88,6 +103,13 @@ public class WebServiceBindingAdmin extends WebServiceBindingBase<DBWServiceAdmi
         .dataFetcher("setDefaultNavigatorSettings",
             env -> getService(env).setDefaultNavigatorSettings(getWebSession(env), WebServiceUtils.parseNavigatorSettings(env.getArgument("settings"))))
         ;
+    }
+
+    @Override
+    public void addServlets(CBApplication application, ServletContextHandler servletContextHandler) {
+        servletContextHandler.addServlet(
+            new ServletHolder("adminLogs", new WebAdminLogsServlet(application)),
+            application.getServicesURI() + "logs/*");
     }
 
 }

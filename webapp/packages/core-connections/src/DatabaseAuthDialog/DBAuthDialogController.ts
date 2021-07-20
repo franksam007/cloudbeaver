@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 
 import { injectable, IInitializableController, IDestructibleController } from '@cloudbeaver/core-di';
 import { CommonDialogService } from '@cloudbeaver/core-dialogs';
@@ -14,18 +14,16 @@ import { NotificationService } from '@cloudbeaver/core-events';
 import { ErrorDetailsDialog } from '@cloudbeaver/core-notifications';
 import { GQLErrorCatcher } from '@cloudbeaver/core-sdk';
 
-import { ConnectionInfoResource } from '../ConnectionInfoResource';
+import { ConnectionInfoResource, ConnectionInitConfig } from '../ConnectionInfoResource';
 import { DBDriverResource } from '../DBDriverResource';
+import type { IFormInitConfig } from './IFormInitConfig';
 
-interface IDBAuthConfig {
-  credentials: any;
-  saveCredentials: boolean;
-}
 @injectable()
 export class DBAuthDialogController implements IInitializableController, IDestructibleController {
-  @observable isAuthenticating = false;
-  @observable config: IDBAuthConfig = {
+  isAuthenticating = false;
+  config: IFormInitConfig = {
     credentials: {},
+    networkCredentials: [],
     saveCredentials: false,
   };
 
@@ -40,7 +38,12 @@ export class DBAuthDialogController implements IInitializableController, IDestru
     private connectionInfoResource: ConnectionInfoResource,
     private commonDialogService: CommonDialogService,
     private dbDriverResource: DBDriverResource
-  ) { }
+  ) {
+    makeObservable(this, {
+      isAuthenticating: observable,
+      config: observable,
+    });
+  }
 
   init(connectionId: string, onClose: () => void) {
     this.connectionId = connectionId;
@@ -60,7 +63,7 @@ export class DBAuthDialogController implements IInitializableController, IDestru
 
     this.isAuthenticating = true;
     try {
-      await this.connectionInfoResource.init(this.connectionId, this.config.credentials, this.config.saveCredentials);
+      await this.connectionInfoResource.init(this.getConfig());
       this.close();
     } catch (exception) {
       if (!this.error.catch(exception) || this.isDistructed) {
@@ -77,9 +80,26 @@ export class DBAuthDialogController implements IInitializableController, IDestru
     }
   };
 
+  private getConfig() {
+    const config: ConnectionInitConfig = {
+      id: this.connectionId,
+    };
+
+    if (Object.keys(this.config.credentials).length > 0) {
+      config.credentials = this.config.credentials;
+      config.saveCredentials = this.config.saveCredentials;
+    }
+
+    if (this.config.networkCredentials.length > 0) {
+      config.networkCredentials = this.config.networkCredentials;
+    }
+
+    return config;
+  }
+
   private async loadAuthModel() {
     try {
-      await this.connectionInfoResource.loadAuthModel(this.connectionId);
+      await this.connectionInfoResource.load(this.connectionId, ['includeAuthProperties']);
     } catch (exception) {
       this.notificationService.logException(exception, 'Can\'t load auth model');
     }

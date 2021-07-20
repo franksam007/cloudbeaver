@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,9 +22,11 @@ import io.cloudbeaver.WebAction;
 import io.cloudbeaver.model.*;
 import io.cloudbeaver.model.session.WebSession;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.model.navigator.DBNBrowseSettings;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.util.List;
 import java.util.Map;
 
@@ -37,44 +39,50 @@ public interface DBWServiceCore extends DBWService {
     WebServerConfig getServerConfig() throws DBWebException;
 
     @WebAction
-    List<WebDatabaseDriverConfig> getDriverList(WebSession webSession, String driverId) throws DBWebException;
+    List<WebDatabaseDriverConfig> getDriverList(@NotNull WebSession webSession, String driverId) throws DBWebException;
 
     @WebAction
-    List<WebDatabaseAuthModel> getAuthModels(WebSession webSession);
+    List<WebDatabaseAuthModel> getAuthModels(@NotNull WebSession webSession);
+
+    @WebAction
+    List<WebNetworkHandlerDescriptor> getNetworkHandlers(@NotNull WebSession webSession);
+
+    @WebAction(requirePermissions = {})
+    List<WebConnectionInfo> getUserConnections(@NotNull WebSession webSession, @Nullable String id) throws DBWebException;
 
     @Deprecated
     @WebAction
     List<WebDataSourceConfig> getTemplateDataSources() throws DBWebException;
 
     @WebAction
-    List<WebConnectionInfo> getTemplateConnections(WebSession webSession) throws DBWebException;
+    List<WebConnectionInfo> getTemplateConnections(@NotNull WebSession webSession) throws DBWebException;
 
     @WebAction(requirePermissions = {})
-    String[] getSessionPermissions(WebSession webSession) throws DBWebException;
+    String[] getSessionPermissions(@NotNull WebSession webSession) throws DBWebException;
 
     ///////////////////////////////////////////
     // Session
 
     @WebAction(requirePermissions = {})
-    WebSession openSession(WebSession webSession) throws DBWebException;
+    WebSession openSession(@NotNull WebSession webSession) throws DBWebException;
 
     @WebAction(requirePermissions = {})
-    WebSession getSessionState(WebSession webSession) throws DBWebException;
+    WebSession getSessionState(@NotNull WebSession webSession) throws DBWebException;
 
     @WebAction
-    List<WebServerMessage> readSessionLog(WebSession webSession, Integer maxEntries, Boolean clearEntries) throws DBWebException;
+    List<WebServerMessage> readSessionLog(@NotNull WebSession webSession, Integer maxEntries, Boolean clearEntries) throws DBWebException;
 
     @WebAction(requirePermissions = {})
     boolean closeSession(HttpServletRequest request) throws DBWebException;
 
     @WebAction(requirePermissions = {})
-    boolean touchSession(HttpServletRequest request) throws DBWebException;
+    boolean touchSession(@NotNull HttpServletRequest request, @NotNull HttpServletResponse servletResponse) throws DBWebException;
 
     @WebAction(requirePermissions = {})
-    boolean refreshSessionConnections(HttpServletRequest request) throws DBWebException;
+    boolean refreshSessionConnections(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response) throws DBWebException;
 
     @WebAction
-    boolean changeSessionLanguage(WebSession webSession, String locale) throws DBWebException;
+    boolean changeSessionLanguage(@NotNull WebSession webSession, String locale) throws DBWebException;
 
     ///////////////////////////////////////////
     // Connections
@@ -82,36 +90,50 @@ public interface DBWServiceCore extends DBWService {
     @WebAction
     WebConnectionInfo getConnectionState(WebSession webSession, String connectionId) throws DBWebException;
 
-    // Replaced with initConnection
-    @Deprecated
     @WebAction
-    WebConnectionInfo openConnection(WebSession webSession, WebConnectionConfig connectionConfig) throws DBWebException;
+    WebConnectionInfo initConnection(
+        @NotNull WebSession webSession,
+        @NotNull String connectionId,
+        @NotNull Map<String, Object> authProperties,
+        @Nullable List<WebNetworkHandlerConfigInput> networkCredentials,
+        @Nullable Boolean saveCredentials) throws DBWebException;
 
     @WebAction
-    WebConnectionInfo initConnection(WebSession webSession, String connectionId, Map<String, Object> authProperties, Boolean saveCredentials) throws DBWebException;
+    WebConnectionInfo createConnection(
+        @NotNull WebSession webSession,
+        @NotNull WebConnectionConfig connectionConfig) throws DBWebException;
 
     @WebAction
-    WebConnectionInfo createConnection(WebSession webSession, WebConnectionConfig connectionConfig) throws DBWebException;
+    WebConnectionInfo updateConnection(
+        @NotNull WebSession webSession,
+        @NotNull WebConnectionConfig connectionConfig) throws DBWebException;
 
     @WebAction
-    WebConnectionInfo createConnectionFromTemplate(WebSession webSession, String templateId) throws DBWebException;
+    boolean deleteConnection(@NotNull WebSession webSession, @NotNull String connectionId) throws DBWebException;
+
+    @WebAction
+    WebConnectionInfo createConnectionFromTemplate(
+        @NotNull WebSession webSession,
+        @NotNull String templateId,
+        @Nullable String connectionName) throws DBWebException;
+
     @WebAction()
-    WebConnectionInfo copyConnectionFromNode(@NotNull WebSession webSession, @NotNull String nodePath) throws DBWebException;
+    WebConnectionInfo copyConnectionFromNode(@NotNull WebSession webSession, @NotNull String nodePath, @NotNull WebConnectionConfig config) throws DBWebException;
 
     @WebAction
-    WebConnectionInfo testConnection(WebSession webSession, WebConnectionConfig connectionConfig) throws DBWebException;
+    WebConnectionInfo testConnection(@NotNull WebSession webSession, @NotNull WebConnectionConfig connectionConfig) throws DBWebException;
 
     @WebAction
-    WebConnectionInfo closeConnection(WebSession webSession, String connectionId) throws DBWebException;
+    WebNetworkEndpointInfo testNetworkHandler(@NotNull WebSession webSession, @NotNull WebNetworkHandlerConfigInput nhConfig) throws DBWebException;
 
     @WebAction
-    boolean deleteConnection(WebSession webSession, String connectionId) throws DBWebException;
+    WebConnectionInfo closeConnection(@NotNull WebSession webSession, @NotNull String connectionId) throws DBWebException;
 
     ///////////////////////////////////////////
     // Navigator settings
 
     @WebAction
-    boolean setConnectionNavigatorSettings(WebSession webSession, String id, DBNBrowseSettings settings) throws DBWebException;
+    WebConnectionInfo setConnectionNavigatorSettings(WebSession webSession, String id, DBNBrowseSettings settings) throws DBWebException;
 
     ///////////////////////////////////////////
     // Async tasks

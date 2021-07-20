@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,8 @@ import org.jkiss.dbeaver.model.impl.auth.AuthModelDatabaseNative;
 import org.jkiss.dbeaver.model.meta.Property;
 import org.jkiss.dbeaver.model.preferences.DBPPropertyDescriptor;
 import org.jkiss.dbeaver.registry.DataSourceProviderRegistry;
+import org.jkiss.dbeaver.registry.network.NetworkHandlerDescriptor;
+import org.jkiss.dbeaver.registry.network.NetworkHandlerRegistry;
 import org.jkiss.dbeaver.runtime.properties.PropertySourceCustom;
 
 import java.util.Arrays;
@@ -44,7 +46,7 @@ public class WebDatabaseDriverConfig {
     public WebDatabaseDriverConfig(WebSession webSession, DBPDriver driver) {
         this.webSession = webSession;
         this.driver = driver;
-        this.id = WebServiceUtils.makeDriverFullId(driver);
+        this.id = driver.getFullId();
     }
 
     @Property
@@ -198,8 +200,29 @@ public class WebDatabaseDriverConfig {
     }
 
     @Property
+    public String[] getApplicableNetworkHandlers() {
+        if (driver.isEmbedded()) {
+            return new String[0];
+        }
+        return NetworkHandlerRegistry.getInstance().getDescriptors(driver).stream()
+            .map(NetworkHandlerDescriptor::getId).toArray(String[]::new);
+    }
+
+    @Property
     public String getDefaultAuthModel() {
+        for (DBPAuthModelDescriptor am : DataSourceProviderRegistry.getInstance().getApplicableAuthModels(driver)) {
+            if (am.isDefaultModel()) {
+                return am.getId();
+            }
+        }
         return AuthModelDatabaseNative.ID;
+    }
+
+    @Property
+    public WebPropertyInfo[] getProviderProperties() {
+        return Arrays.stream(driver.getProviderPropertyDescriptors())
+            .map(p -> new WebPropertyInfo(webSession, p, null))
+            .toArray(WebPropertyInfo[]::new);
     }
 
 }

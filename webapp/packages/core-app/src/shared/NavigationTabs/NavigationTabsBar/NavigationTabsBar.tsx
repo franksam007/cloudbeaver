@@ -1,20 +1,21 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
-import { useCallback } from 'react';
+import { observer } from 'mobx-react-lite';
+import { useCallback, useEffect } from 'react';
 import styled, { css } from 'reshadow';
 
 import {
-  TextPlaceholder, TabsBox, TabPanel, useFocus
+  TextPlaceholder, TabsBox, TabPanel, useFocus, useExecutor
 } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { useTranslate } from '@cloudbeaver/core-localization';
+import { SessionDataResource } from '@cloudbeaver/core-root';
 import { useStyles, composes } from '@cloudbeaver/core-theming';
 import { useActiveView } from '@cloudbeaver/core-view';
 
@@ -40,6 +41,7 @@ const styles = composes(
 const stylesArray = [styles];
 
 export const NavigationTabsBar = observer(function NavigationTabsBar() {
+  const sessionDataResource = useService(SessionDataResource);
   const navigation = useService(NavigationTabsService);
   // TODO: we get exception when after closing the restored page trying to open another
   //       it's related to hooks order and state restoration
@@ -51,6 +53,18 @@ export const NavigationTabsBar = observer(function NavigationTabsBar() {
 
   const handleSelect = useCallback((tabId: string) => navigation.selectTab(tabId), [navigation]);
   const handleClose = useCallback((tabId: string) => navigation.closeTab(tabId), [navigation]);
+
+  async function restoreTabs() {
+    await navigation.unloadTabs();
+    await navigation.restoreTabs();
+  }
+
+  useExecutor({
+    executor: sessionDataResource.onDataUpdate,
+    postHandlers: [restoreTabs],
+  });
+
+  useEffect(() => { restoreTabs(); }, []);
 
   if (navigation.tabIdList.length === 0) {
     return <TextPlaceholder>{translate('app_shared_navigationTabsBar_placeholder')}</TextPlaceholder>;

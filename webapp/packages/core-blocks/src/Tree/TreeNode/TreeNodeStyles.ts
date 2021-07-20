@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ export const TREE_NODE_STYLES = composes(
         }
 
         & > TreeNodeControl > TreeNodeExpand {
-          transform: rotate(90deg);
+          transform: rotate(0deg);
         }
       }
 
@@ -64,7 +64,7 @@ export const TREE_NODE_STYLES = composes(
       opacity: 0.5;
       width: 16px;
       height: 16px;
-
+      transform: rotate(-90deg);
       & [|size='small'] {
         display: block;
       }
@@ -84,6 +84,14 @@ export const TREE_NODE_STYLES = composes(
     TreeNodeName {
       box-sizing: border-box;
       padding-right: 16px;
+    }
+
+    TreeNodeFilter {
+      position: relative;
+      min-width: 24px;
+      min-height: 24px;
+      display: flex;
+      align-items: center;
     }
 
     TreeNodeNested {

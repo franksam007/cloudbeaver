@@ -13,6 +13,9 @@ type AuthCredentialInfo {
     admin: Boolean
     # This field must be shown in login form
     user: Boolean
+    # This field can be used as user identifier
+
+    identifying: Boolean
     possibleValues: [String]
     encryption: AuthCredentialEncryption
 }
@@ -30,30 +33,51 @@ type AuthProviderInfo {
     credentialParameters: [AuthCredentialInfo!]!
 }
 
-type UserAuthInfo {
-    # User unique identifier
-    userId: String!
-    # Human readable display name. May be null
-    displayName: String
-    # Auth provider ID
-    authProvider: String!
+type UserAuthToken {
+    # Auth provider used for autgorization
+    authProvider: ID!
 
+    # Authorization time
     loginTime: DateTime!
+
+    # User identity (aka user name) specific to auth provider
+    userId: String!
+
+    # User display name specific to auth provider
+    displayName: String!
 
     # Optional login message
     message: String
 
+    # Auth origin
     origin: ObjectOrigin!
+}
+
+type UserInfo {
+    # User unique identifier
+    userId: ID!
+
+    # Human readable display name. It is taken from the first auth provider which was used for user login.
+    displayName: String
+
+    authTokens: [UserAuthToken!]!
+
+    linkedAuthProviders: [String!]!
 }
 
 extend type Query {
 
-    authLogin(provider: ID!, credentials: Object!): UserAuthInfo!
+    # Authorize user using specified auth provider. If linkUser=true then associates new
+    authLogin(provider: ID!, credentials: Object!, linkUser: Boolean): UserAuthToken!
 
-    authLogout: Boolean
+    # Logouts user. If provider not specified then all authorizations are revoked from session.
+    authLogout(provider: ID): Boolean
 
-    sessionUser: UserAuthInfo
+    # Active user information. null is no user was authorized within session
+    activeUser: UserInfo
 
     authProviders: [AuthProviderInfo!]!
+
+    authChangeLocalPassword(oldPassword: String!, newPassword: String!): Boolean!
 
 }

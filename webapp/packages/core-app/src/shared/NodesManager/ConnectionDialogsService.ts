@@ -1,31 +1,35 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
 import { ConnectionInfoResource, ConnectionsManagerService, EConnectionFeature } from '@cloudbeaver/core-connections';
-import { injectable } from '@cloudbeaver/core-di';
+import { Bootstrap, injectable } from '@cloudbeaver/core-di';
 import { ContextMenuService, IMenuContext } from '@cloudbeaver/core-dialogs';
+import { NotificationService } from '@cloudbeaver/core-events';
 
 import { NavigationTreeContextMenuService } from '../../NavigationTree/NavigationTreeContextMenuService';
 import { EMainMenu, MainMenuService } from '../../TopNavBar/MainMenu/MainMenuService';
-import { NavNode } from './EntityTypes';
+import type { NavNode } from './EntityTypes';
 import { EObjectFeature } from './EObjectFeature';
 import { NodeManagerUtils } from './NodeManagerUtils';
 
 @injectable()
-export class ConnectionDialogsService {
+export class ConnectionDialogsService extends Bootstrap {
   constructor(
     private mainMenuService: MainMenuService,
     private contextMenuService: ContextMenuService,
     private connectionsManagerService: ConnectionsManagerService,
-    private connectionInfoResource: ConnectionInfoResource
-  ) {}
+    private connectionInfoResource: ConnectionInfoResource,
+    private notificationService: NotificationService,
+  ) {
+    super();
+  }
 
-  registerMenuItems(): void {
+  register(): void {
     this.mainMenuService.registerMenuItem(
       EMainMenu.mainMenuConnectionsPanel,
       {
@@ -74,13 +78,19 @@ export class ConnectionDialogsService {
             || !connection?.features.includes(EConnectionFeature.manageable);
         },
         title: 'ui_delete',
-        onClick: (context: IMenuContext<NavNode>) => {
+        onClick: async (context: IMenuContext<NavNode>) => {
           const node = context.data;
-          this.connectionsManagerService.deleteConnection(
-            NodeManagerUtils.connectionNodeIdToConnectionId(node.id)
-          );
+          try {
+            await this.connectionsManagerService.deleteConnection(
+              NodeManagerUtils.connectionNodeIdToConnectionId(node.id)
+            );
+          } catch (exception) {
+            this.notificationService.logException(exception, 'Failed to delete connection');
+          }
         },
       }
     );
   }
+
+  load(): void { }
 }

@@ -1,21 +1,24 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import { useCallback, useContext } from 'react';
 import styled, { use } from 'reshadow';
 
+import { EventContext } from '@cloudbeaver/core-events';
 import { useStyles } from '@cloudbeaver/core-theming';
 
+import { EventTableItemExpandFlag } from './EventTableItemExpandFlag';
+import { EventTableItemSelectionFlag } from './EventTableItemSelectionFlag';
 import { TableContext } from './TableContext';
 import { TableItemContext } from './TableItemContext';
 
-type Props = React.PropsWithChildren<{
+type Props = {
   align?: 'left' | 'center' | 'right' | 'justify' | 'char';
   className?: string;
   centerContent?: boolean;
@@ -23,9 +26,9 @@ type Props = React.PropsWithChildren<{
   expand?: boolean;
   onClick?: () => void;
   onDoubleClick?: () => void;
-}>;
+} & React.DetailedHTMLProps<React.TdHTMLAttributes<HTMLTableDataCellElement>, HTMLTableDataCellElement>;
 
-export const TableColumnValue = observer(function TableColumnValue({
+export const TableColumnValue: React.FC<Props> = observer(function TableColumnValue({
   align,
   children,
   centerContent,
@@ -34,7 +37,8 @@ export const TableColumnValue = observer(function TableColumnValue({
   className,
   onClick,
   onDoubleClick,
-}: Props) {
+  ...rest
+}) {
   const styles = useStyles();
   const tableContext = useContext(TableContext);
   const context = useContext(TableItemContext);
@@ -44,9 +48,10 @@ export const TableColumnValue = observer(function TableColumnValue({
       return;
     }
 
-    if (expand) {
-      event.stopPropagation();
+    if (expand && !EventContext.has(event, EventTableItemExpandFlag)) {
       const state = !context.isExpanded();
+      EventContext.set(event, EventTableItemExpandFlag, state);
+      EventContext.set(event, EventTableItemSelectionFlag);
       tableContext?.setItemExpand(context.item, state);
     }
 
@@ -72,8 +77,9 @@ export const TableColumnValue = observer(function TableColumnValue({
       {...use({ centerContent })}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
+      {...rest}
     >
-      {flex && <td-flex as='div'>{children}</td-flex>}
+      {flex && <td-flex className={className}>{children}</td-flex>}
       {!flex && children}
     </td>
   );

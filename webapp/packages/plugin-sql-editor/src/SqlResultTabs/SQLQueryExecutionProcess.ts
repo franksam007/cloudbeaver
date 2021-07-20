@@ -1,20 +1,19 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { NotificationService } from '@cloudbeaver/core-events';
+import type { IConnectionExecutionContextInfo } from '@cloudbeaver/core-connections';
+import type { NotificationService } from '@cloudbeaver/core-events';
 import {
   AsyncTaskInfo, GraphQLService, ServerInternalError, SqlExecuteInfo, SqlDataFilter, ResultDataFormat
 } from '@cloudbeaver/core-sdk';
 import {
   CancellablePromise, cancellableTimeout, Deferred, EDeferredState
 } from '@cloudbeaver/core-utils';
-
-import { ISqlQueryParams } from '../ISqlEditorTabState';
 
 const DELAY_BETWEEN_TRIES = 1000;
 
@@ -31,13 +30,14 @@ export class SQLQueryExecutionProcess extends Deferred<SqlExecuteInfo> {
   }
 
   async start(
-    sqlQueryParams: ISqlQueryParams,
+    query: string,
+    context: IConnectionExecutionContextInfo,
     filter: SqlDataFilter,
     dataFormat: ResultDataFormat
   ): Promise<void> {
     // start async task
     try {
-      const taskInfo = await this.executeQueryAsync(sqlQueryParams, filter, dataFormat);
+      const taskInfo = await this.executeQueryAsync(query, context, filter, dataFormat);
       await this.applyResult(taskInfo);
       this.taskId = taskInfo.id;
       if (this.getState() === EDeferredState.CANCELLING) {
@@ -106,14 +106,15 @@ export class SQLQueryExecutionProcess extends Deferred<SqlExecuteInfo> {
   }
 
   private async executeQueryAsync(
-    sqlQueryParams: ISqlQueryParams,
+    query: string,
+    context: IConnectionExecutionContextInfo,
     filter: SqlDataFilter,
     dataFormat: ResultDataFormat
   ): Promise<AsyncTaskInfo> {
     const { taskInfo } = await this.graphQLService.sdk.asyncSqlExecuteQuery({
-      connectionId: sqlQueryParams.connectionId,
-      contextId: sqlQueryParams.contextId,
-      query: sqlQueryParams.query,
+      connectionId: context.connectionId,
+      contextId: context.id,
+      query,
       filter,
       dataFormat,
     });
@@ -153,9 +154,7 @@ export class SQLQueryExecutionProcess extends Deferred<SqlExecuteInfo> {
   private onError(error: Error, status?: string) {
     // if task failed to execute during cancelling - it means it was cancelled successfully
     if (this.getState() === EDeferredState.CANCELLING) {
-      this.toCancelled();
-      const message = `Query execution has been canceled${status ? `: ${status}` : ''}`;
-      this.notificationService.logException(error, 'Query execution Error', message);
+      this.toCancelled(error);
     } else {
       this.toRejected(error);
     }

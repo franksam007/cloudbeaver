@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import styled, { css } from 'reshadow';
 
 import {
@@ -16,12 +16,12 @@ import { DBDriverResource } from '@cloudbeaver/core-connections';
 import { useService } from '@cloudbeaver/core-di';
 import { useStyles } from '@cloudbeaver/core-theming';
 
-import { AdminConnection } from '../../ConnectionsResource';
+import type { DatabaseConnection } from '../../ConnectionsResource';
 import { ConnectionsAdministrationService } from '../ConnectionsAdministrationService';
 import { ConnectionEdit } from './ConnectionEdit';
 
 interface Props {
-  connection: AdminConnection;
+  connection: DatabaseConnection;
 }
 
 const styles = css`
@@ -60,8 +60,11 @@ export const Connection = observer(function Connection({ connection }: Props) {
       </TableColumnValue>
       <TableColumnValue expand>{connection.name}</TableColumnValue>
       <TableColumnValue>{connection.host}{connection.host && connection.port && `:${connection.port}`}</TableColumnValue>
-      <TableColumnValue>
-        <Placeholder container={connectionsAdministrationService.connectionDetailsPlaceholder} context={connection} />
+      <TableColumnValue flex>
+        <Placeholder
+          container={connectionsAdministrationService.connectionDetailsPlaceholder}
+          connection={connection}
+        />
       </TableColumnValue>
     </TableItem>
   );

@@ -1,16 +1,16 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import { useRef, useLayoutEffect } from 'react';
 import styled, { css } from 'reshadow';
 
-import { useAppLoadingSreen } from '@cloudbeaver/core-blocks';
+import { useAppLoadingScreen } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { DialogsPortal } from '@cloudbeaver/core-dialogs';
 import { Notifications } from '@cloudbeaver/core-notifications';
@@ -23,12 +23,14 @@ const bodyStyles = css`
   theme {
     height: 100vh;
     display: flex;
+    padding: 0 !important; /* fix additional padding with modal reakit menu */
     flex-direction: column;
+    overflow: hidden;
   }
 `;
 
 export const Body = observer(function Body() {
-  useAppLoadingSreen();
+  useAppLoadingScreen();
   const ref = useRef<HTMLDivElement>(null);
   const screenService = useService(ScreenService);
   const Screen = screenService.screen?.component;
@@ -43,7 +45,7 @@ export const Body = observer(function Body() {
   });
 
   return styled(useStyles(bodyStyles))(
-    <theme ref={ref} as="div">
+    <theme ref={ref}>
       {Screen && <Screen />}
       <DialogsPortal />
       <Notifications />

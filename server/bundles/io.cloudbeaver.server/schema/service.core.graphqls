@@ -75,24 +75,48 @@ type WebServiceConfig {
     bundleVersion: String!
 }
 
+type ProductInfo {
+    id: ID!
+    version: String!
+    name: String!
+    description: String
+    buildTime: String!
+    releaseTime: String!
+    licenseInfo: String
+}
+
 type ServerConfig {
     name: String!
     version: String!
+    workspaceId: ID!
+
+    serverURL: String!
+
+    rootURI: String!
 
     anonymousAccessEnabled: Boolean
-    authenticationEnabled: Boolean
+    authenticationEnabled: Boolean @deprecated
     supportsCustomConnections: Boolean
     supportsConnectionBrowser: Boolean
     supportsWorkspaces: Boolean
+
+    publicCredentialsSaveEnabled: Boolean
+    adminCredentialsSaveEnabled: Boolean
+
+    licenseRequired: Boolean!
+    licenseValid: Boolean!
+
     sessionExpireTime: Int
     localHostAddress: String
 
     configurationMode: Boolean
     developmentMode: Boolean
 
+    enabledAuthProviders: [ID!]!
     supportedLanguages: [ ServerLanguage! ]!
     services: [ WebServiceConfig ]
     productConfiguration: Object!
+    productInfo: ProductInfo!
     defaultNavigatorSettings: NavigatorSettings!
 }
 
@@ -150,18 +174,29 @@ type DriverInfo {
     promotedScore: Int
 
     # Never used?
-    connectionProperties: Object
-    defaultConnectionProperties: Object
+    #connectionProperties: Object
+    #defaultConnectionProperties: Object
 
     # Driver properties.
     # Note: it is expensive property and it may produce database server roundtrips.
     # Call it only when you really need it.
-    driverProperties: [ObjectPropertyInfo!]
-    driverParameters: Object
+    # These properties are for advanced users in usually shouldn't be specified for new connections.
+    driverProperties: [ObjectPropertyInfo!]!
+    # Driver parameters (map name->value)
+    driverParameters: Object!
 
+    # Additional driver provider properties
+    # These properties can be configured by user on main connection page
+    # to provide important connection settings
+    providerProperties: [ObjectPropertyInfo!]!
+
+    # False for drivers which do not support authentication
     anonymousAccess: Boolean
+
     defaultAuthModel: ID!
     applicableAuthModel: [ID!]!
+
+    applicableNetworkHandlers: [ID]!
 }
 
 enum ResultDataFormat {
@@ -169,6 +204,33 @@ enum ResultDataFormat {
     document,
     graph,
     timeseries
+}
+
+## Network handler config
+
+enum NetworkHandlerType {
+    TUNNEL,
+    PROXY,
+    CONFIG
+}
+
+type NetworkHandlerDescriptor {
+    id: ID!
+    codeName: String!
+    label: String!
+    description: String
+    secured: Boolean!
+    type: NetworkHandlerType
+    properties: [ObjectPropertyInfo!]!
+}
+
+type NetworkHandlerConfig {
+    id: ID!
+    enabled: Boolean!
+    userName: String
+    password: String
+    savePassword: Boolean!
+    properties: Object!
 }
 
 # Connection instance
@@ -204,10 +266,19 @@ type ConnectionInfo {
     authModel: ID
     authProperties: [ObjectPropertyInfo!]!
 
+    providerProperties: Object!
+    networkHandlersConfig: [NetworkHandlerConfig!]!
+
     # Supported features (provided etc)
     features: [ String! ]!
     navigatorSettings: NavigatorSettings!
     supportedDataFormats: [ ResultDataFormat! ]!
+}
+
+type NetworkEndpointInfo {
+    message: String
+    clientVersion: String
+    serverVersion: String
 }
 
 type ObjectOrigin {
@@ -217,6 +288,46 @@ type ObjectOrigin {
     icon: String
     configuration: Object
     details: [ObjectPropertyInfo!]
+}
+
+type NavigatorSettings {
+    showSystemObjects: Boolean!
+    showUtilityObjects: Boolean!
+    showOnlyEntities: Boolean!
+    mergeEntities: Boolean!
+    hideFolders: Boolean!
+    hideSchemas: Boolean!
+    hideVirtualModel: Boolean!
+}
+
+type LogEntry {
+    time: DateTime
+    type: String!
+    message: String
+    stackTrace: String
+}
+
+####################################################
+# Input types
+####################################################
+
+input NavigatorSettingsInput {
+    showSystemObjects: Boolean!
+    showUtilityObjects: Boolean!
+    showOnlyEntities: Boolean!
+    mergeEntities: Boolean!
+    hideFolders: Boolean!
+    hideSchemas: Boolean!
+    hideVirtualModel: Boolean!
+}
+
+input NetworkHandlerConfigInput {
+    id: ID!
+    enabled: Boolean
+    userName: String
+    password: String
+    savePassword: Boolean
+    properties: Object
 }
 
 # Configuration of particular connection. Used for new connection create. Includes auth info
@@ -252,41 +363,22 @@ input ConnectionConfig {
     authModelId: ID
     credentials: Object
 
+    # Map of provider properties (name/value)
+
+    providerProperties: Object
+
+    # Network handlers. Map of id->property map (name/value).
+
+    networkHandlersConfig: [NetworkHandlerConfigInput!]
+
     #### deprecated fields
 
     # ID of predefined datasource
-    dataSourceId: ID
+    dataSourceId: ID #@deprecated
 
     # Direct user credentials
-    userName: String # @deprecated
-    userPassword: String # deprecated
-}
-
-type NavigatorSettings {
-    showSystemObjects: Boolean!
-    showUtilityObjects: Boolean!
-    showOnlyEntities: Boolean!
-    mergeEntities: Boolean!
-    hideFolders: Boolean!
-    hideSchemas: Boolean!
-    hideVirtualModel: Boolean!
-}
-
-input NavigatorSettingsInput {
-    showSystemObjects: Boolean!
-    showUtilityObjects: Boolean!
-    showOnlyEntities: Boolean!
-    mergeEntities: Boolean!
-    hideFolders: Boolean!
-    hideSchemas: Boolean!
-    hideVirtualModel: Boolean!
-}
-
-type LogEntry {
-    time: DateTime
-    type: String!
-    message: String
-    stackTrace: String
+    userName: String #@deprecated
+    userPassword: String #@deprecated
 }
 
 ####################################################
@@ -305,11 +397,13 @@ extend type Query {
 
     # Get driver info
     driverList( id: ID ): [ DriverInfo! ]!
+    authModels: [DatabaseAuthModel!]!
+    networkHandlers: [NetworkHandlerDescriptor!]!
 
+    # List of user connections.
+    userConnections( id: ID ): [ ConnectionInfo! ]!
     # List of template connections.
     templateConnections: [ ConnectionInfo! ]!
-
-    authModels: [DatabaseAuthModel!]!
 
     # Return connection state
     connectionState( id: ID! ): ConnectionInfo! @deprecated
@@ -339,25 +433,29 @@ extend type Mutation {
     # Create new custom connection. Custom connections exist only within the current session.
     createConnection( config: ConnectionConfig! ): ConnectionInfo!
 
-    createConnectionFromTemplate( templateId: ID! ): ConnectionInfo!
+    updateConnection( config: ConnectionConfig! ): ConnectionInfo!
+
+    deleteConnection( id: ID! ): Boolean!
+
+    createConnectionFromTemplate( templateId: ID!, connectionName: String ): ConnectionInfo!
 
     # Copies connection configuration from node
-    copyConnectionFromNode( nodePath: String! ): ConnectionInfo!
+    copyConnectionFromNode( nodePath: String!, config: ConnectionConfig ): ConnectionInfo!
 
     # Test connection configuration. Returns remote server version
     testConnection( config: ConnectionConfig! ): ConnectionInfo!
 
+    # Test connection configuration. Returns remote server version
+    testNetworkHandler( config: NetworkHandlerConfigInput! ): NetworkEndpointInfo!
+
     # Initiate existing connection
-    initConnection( id: ID!, credentials: Object, saveCredentials: Boolean ): ConnectionInfo!
+    initConnection( id: ID!, credentials: Object, networkCredentials: [NetworkHandlerConfigInput!], saveCredentials: Boolean ): ConnectionInfo!
 
     # Disconnect from database
     closeConnection( id: ID! ): ConnectionInfo!
 
-    # Remove connection and disconnects from the database if needed
-    deleteConnection( id: ID! ): Boolean!
-
     # Changes navigator settings for connection
-    setConnectionNavigatorSettings( id: ID!, settings: NavigatorSettingsInput!): Boolean!
+    setConnectionNavigatorSettings( id: ID!, settings: NavigatorSettingsInput!): ConnectionInfo!
 
     #### Generic async functions
 

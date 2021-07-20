@@ -1,16 +1,16 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { action } from 'mobx';
+import { action, makeObservable } from 'mobx';
 import { Subject, Observable } from 'rxjs';
 
-import { TableColumn } from './TableColumn';
-import { CellValue, SomeTableRows, TableRow } from './TableRow';
+import type { TableColumn } from './TableColumn';
+import type { CellValue, SomeTableRows, TableRow } from './TableRow';
 
 /**
  * This model contains read-only data from a server database table.
@@ -24,23 +24,32 @@ export class TableDataModel {
   private columns: TableColumn[] = [];
 
   constructor() {
+    makeObservable(this, {
+      resetData: action,
+      updateRows: action,
+      updateRow: action,
+      updateCell: action,
+      insertRows: action,
+      setColumns: action,
+    });
+
     this.rowsUpdateSubject = new Subject();
     this.onRowsUpdate = this.rowsUpdateSubject.asObservable();
   }
 
-  getRows() {
+  getRows(): TableRow[] {
     return this.rows;
   }
 
-  getColumns() {
+  getColumns(): TableColumn[] {
     return this.columns;
   }
 
   isEmpty(): boolean {
-    return this.rows.length === 0;
+    return this.columns.length === 0;
   }
 
-  isChunkLoaded(offset: number, count: number) {
+  isChunkLoaded(offset: number, count: number): boolean {
     return (
       (this.rows.length > offset && !!this.rows[offset])
       && (this.rows.length > offset + count - 1 && !!this.rows[offset + count - 1])
@@ -66,37 +75,32 @@ export class TableDataModel {
     return [...this.rows[rowNumber]];
   }
 
-  @action
-  resetData() {
+  resetData(): void {
     this.rows = [];
     this.columns = [];
   }
 
-  @action
-  updateRows(newRows: SomeTableRows) {
+  updateRows(newRows: SomeTableRows): void {
     for (const [key, row] of newRows) {
       this.updateRow(key, row);
     }
   }
 
-  @action
-  updateRow(rowIndex: number, value: TableRow) {
+  updateRow(rowIndex: number, value: TableRow): void {
     this.rows[rowIndex] = value;
     this.rowsUpdateSubject.next([rowIndex]);
   }
 
-  @action
-  updateCell(rowIndex: number, cellIndex: number, value: CellValue) {
+  updateCell(rowIndex: number, cellIndex: number, value: CellValue): void {
     const row = this.rows[rowIndex];
     if (row && cellIndex < row.length) {
       row[cellIndex] = value;
     }
   }
 
-  @action
-  insertRows(position: number, rows: TableRow[]) {
+  insertRows(position: number, rows: TableRow[]): void {
     if (rows.length > 0) {
-      if (position > this.rows.length) {
+      if (position + rows.length > this.rows.length) {
         this.rows.length = position + rows.length;
       }
 
@@ -104,8 +108,7 @@ export class TableDataModel {
     }
   }
 
-  @action
-  setColumns(columns: TableColumn[]) {
+  setColumns(columns: TableColumn[]): void {
     this.columns = [...columns];
   }
 }

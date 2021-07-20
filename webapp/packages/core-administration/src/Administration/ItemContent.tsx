@@ -1,17 +1,18 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 
+import { Loader } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 
 import { AdministrationItemService } from '../AdministrationItem/AdministrationItemService';
-import { IAdministrationItemRoute } from '../AdministrationItem/IAdministrationItemRoute';
+import type { IAdministrationItemRoute } from '../AdministrationItem/IAdministrationItemRoute';
 
 interface Props {
   activeScreen: IAdministrationItemRoute | null;
@@ -32,6 +33,10 @@ export const ItemContent: React.FC<Props> = observer(function ItemContent({
 
   if (!item) {
     return null;
+  }
+
+  if (administrationItemService.itemActivating) {
+    return <Loader />;
   }
 
   if (activeScreen.sub) {

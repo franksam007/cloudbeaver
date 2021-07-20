@@ -1,29 +1,33 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { computed, observable } from 'mobx';
+import { computed, observable, makeObservable } from 'mobx';
 
 import { injectable } from '@cloudbeaver/core-di';
 import { IExecutor, Executor } from '@cloudbeaver/core-executor';
 import { PermissionsResource, PermissionsService, ServerConfigResource } from '@cloudbeaver/core-root';
 import { ScreenService, RouterState } from '@cloudbeaver/core-routing';
 import { LocalStorageSaveService } from '@cloudbeaver/core-settings';
+import { GlobalConstants } from '@cloudbeaver/core-utils';
 
 import { AdministrationItemService } from '../AdministrationItem/AdministrationItemService';
-import { IAdministrationItemRoute } from '../AdministrationItem/IAdministrationItemRoute';
-import { IRouteParams } from '../AdministrationItem/IRouteParams';
+import type { IAdministrationItemRoute } from '../AdministrationItem/IAdministrationItemRoute';
+import type { IRouteParams } from '../AdministrationItem/IRouteParams';
 import { EAdminPermission } from '../EAdminPermission';
 
 const ADMINISTRATION_ITEMS_STATE = 'administration_items_state';
-const ADMINISTRATION_INFO = 'administration_mode';
+const ADMINISTRATION_INFO = 'administration_info';
 
 interface IAdministrationScreenInfo {
-  mode: boolean;
+  workspaceId: string;
+  version: string;
+  serverVersion: string;
+  configurationMode: boolean;
 }
 
 @injectable()
@@ -38,15 +42,19 @@ export class AdministrationScreenService {
   static setupItemSubRouteName = 'setup.item.sub';
   static setupItemSubParamRouteName = 'setup.item.sub.param';
 
-  @observable info: IAdministrationScreenInfo;
-  @observable itemState: Map<string, any>;
+  info: IAdministrationScreenInfo;
+  itemState: Map<string, any>;
 
-  @computed get activeScreen(): IAdministrationItemRoute | null {
+  get activeScreen(): IAdministrationItemRoute | null {
     return this.getScreen(this.screenService.routerService.state);
   }
 
   get isConfigurationMode(): boolean {
-    return !!this.serverConfigResource.data?.configurationMode;
+    return this.serverConfigResource.configurationMode;
+  }
+
+  get publicDisabled(): boolean {
+    return this.serverConfigResource.publicDisabled;
   }
 
   readonly ensurePermissions: IExecutor<void>;
@@ -61,15 +69,24 @@ export class AdministrationScreenService {
     private serverConfigResource: ServerConfigResource
   ) {
     this.info = {
-      mode: false,
+      workspaceId: '',
+      version: GlobalConstants.version || '',
+      serverVersion: '',
+      configurationMode: false,
     };
     this.itemState = new Map();
     this.activationEvent = new Executor();
     this.ensurePermissions = new Executor();
 
+    makeObservable(this, {
+      info: observable,
+      itemState: observable,
+      activeScreen: computed,
+    });
+
     this.autoSaveService.withAutoSave(this.itemState, ADMINISTRATION_ITEMS_STATE);
     this.autoSaveService.withAutoSave(this.info, ADMINISTRATION_INFO);
-    this.permissionsResource.onDataUpdate.addHandler(() => {
+    this.permissionsResource.onDataUpdate.addPostHandler(() => {
       this.checkPermissions(this.screenService.routerService.state);
     });
   }
@@ -125,17 +142,15 @@ export class AdministrationScreenService {
   getItemState<T>(name: string): T | undefined
   getItemState<T>(name: string, defaultState: () => T, update?: boolean, validate?: (state: T) => boolean): T
   getItemState<T>(
-    name: string, defaultState?: () => T,
+    name: string,
+    defaultState?: () => T,
     update?: boolean,
     validate?: (state: T) => boolean
   ): T | undefined {
     if (!this.serverConfigResource.isLoaded()) {
       throw new Error('Administration screen getItemState can be used only after server configuration loaded');
     }
-    if (this.info.mode !== this.isConfigurationMode) {
-      this.clearItemsState();
-      this.info.mode = this.isConfigurationMode;
-    }
+    this.validateState();
 
     if (defaultState) {
       if (!this.itemState.has(name) || update) {
@@ -168,11 +183,13 @@ export class AdministrationScreenService {
 
     const toScreen = this.getScreen(nextState);
     const screen = this.getScreen(state);
+
     if (screen) {
       await this.administrationItemService.deActivate(
         screen,
         this.isConfigurationMode,
-        screen.sub !== toScreen?.sub
+        screen.item !== toScreen?.item,
+        toScreen === null
       );
     }
 
@@ -201,7 +218,7 @@ export class AdministrationScreenService {
   }
 
   async handleActivate(state: RouterState, prevState?: RouterState): Promise<void> {
-    if (!await this.checkPermissions(state)) {
+    if (!(await this.checkPermissions(state))) {
       return;
     }
 
@@ -213,24 +230,42 @@ export class AdministrationScreenService {
       await this.administrationItemService.activate(
         screen,
         this.isConfigurationMode,
-        screen.item !== fromScreen?.item
+        screen.item !== fromScreen?.item,
+        fromScreen === null
       );
     }
   }
 
-  private async checkPermissions(state: RouterState) {
+  private validateState() {
+    if (
+      this.info.workspaceId !== this.serverConfigResource.workspaceId
+      || this.info.configurationMode !== this.isConfigurationMode
+      || this.info.serverVersion !== this.serverConfigResource.serverVersion
+      || this.info.version !== GlobalConstants.version
+    ) {
+      this.clearItemsState();
+      this.info.workspaceId = this.serverConfigResource.workspaceId;
+      this.info.configurationMode = this.isConfigurationMode;
+      this.info.serverVersion = this.serverConfigResource.serverVersion;
+      this.info.version = GlobalConstants.version || '';
+    }
+  }
+
+  private async checkPermissions(state: RouterState): Promise<boolean> {
     if (!this.isAdministrationRouteActive(state.name)) {
-      return;
+      return false;
     }
 
-    if (!await this.isAccessProvided(state)) {
+    const accessProvided = await this.isAccessProvided(state);
+
+    if (!accessProvided) {
       this.screenService.navigateToRoot();
       return false;
     }
     return true;
   }
 
-  private async isAccessProvided(state: RouterState) {
+  private async isAccessProvided(state: RouterState): Promise<boolean> {
     await this.serverConfigResource.load();
 
     if (this.isConfigurationMode) {
@@ -238,13 +273,14 @@ export class AdministrationScreenService {
     }
 
     if (this.screenService.isActive(state.name, AdministrationScreenService.setupName)) {
-      this.navigateToRoot();
-      return;
+      return false;
     }
 
     await this.ensurePermissions.execute();
 
-    if (!await this.permissionsService.hasAsync(EAdminPermission.admin)) {
+    const administrator = await this.permissionsService.hasAsync(EAdminPermission.admin);
+
+    if (!administrator) {
       return false;
     }
 

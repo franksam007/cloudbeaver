@@ -1,39 +1,40 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 
-import { injectable } from '@cloudbeaver/core-di';
 import { Executor, IExecutor, TaskScheduler } from '@cloudbeaver/core-executor';
 
-@injectable()
 export abstract class LocalResource<
   TData,
   TParam,
 > {
-  @observable
   data: TData;
 
   readonly onDataOutdated: IExecutor<TParam>;
   readonly onDataUpdate: IExecutor<TData>;
 
-  @observable
   protected outdated = new Set<TParam>();
 
-  @observable
   protected dataLoading = new Set<TParam>();
 
-  @observable
   protected loading = false;
 
   protected scheduler: TaskScheduler<TParam>;
 
   constructor(defaultValue: TData) {
+    makeObservable<LocalResource<TData, TParam>, 'outdated' | 'dataLoading' | 'loading'>(this, {
+      data: observable,
+      outdated: observable,
+      dataLoading: observable,
+      loading: observable,
+    });
+
     this.includes = this.includes.bind(this);
     this.scheduler = new TaskScheduler(this.includes);
     this.data = defaultValue;

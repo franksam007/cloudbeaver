@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
  */
 package io.cloudbeaver;
 
+import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.model.user.WebUser;
 import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
@@ -38,21 +39,38 @@ public interface DBWAuthProviderExternal<AUTH_SESSION extends DBASession> extend
      * Returns new identifying credentials which can be used to find/create user in database
      */
     @NotNull
-    Map<String, Object> readExternalCredentials(
+    Map<String, Object> authExternalUser(
         @NotNull DBRProgressMonitor monitor,
         @NotNull Map<String, Object> providerConfig, // Auth provider configuration (e.g. 3rd party auth server address)
         @NotNull Map<String, Object> authParameters // Passed auth parameters (e.g. user name or password)
     ) throws DBException;
 
+    /**
+     * Returns new identifying credentials which can be used to find/create user in database
+     */
     @NotNull
-    WebUser registerNewUser(
+    Map<String, Object> authFederatedUser(
+        @NotNull DBRProgressMonitor monitor,
+        @NotNull Map<String, Object> providerConfig, // Auth provider configuration (e.g. 3rd party auth server address)
+        @NotNull String faProvider,
+        @NotNull Map<String, Object> faParameters // Passed federated auth parameters (e.g. assertion ID, session token, etc)
+    ) throws DBException;
+
+    /**
+     * Validates that external user may be associated with local user
+     * @param userCredentials credentials from authExternalUser
+     * @return new user ID. If activeUser is not null then it must be the same as activeUser ID.
+     */
+    @NotNull
+    String validateLocalAuth(
         @NotNull DBRProgressMonitor monitor,
         @NotNull DBWSecurityController securityController,
         @NotNull Map<String, Object> providerConfig,
-        @NotNull Map<String, Object> credentials) throws DBException;
+        @NotNull Map<String, Object> userCredentials,
+        @Nullable WebUser activeUser) throws DBException;
 
     @Nullable
-    String getUserDisplayName(
+    DBWUserIdentity getUserIdentity(
         @NotNull DBRProgressMonitor monitor,
         @NotNull Map<String, Object> providerConfig,
         @NotNull Map<String, Object> credentials) throws DBException;
@@ -60,7 +78,8 @@ public interface DBWAuthProviderExternal<AUTH_SESSION extends DBASession> extend
     @Nullable
     DBPObject getUserDetails(
         @NotNull DBRProgressMonitor monitor,
-        AUTH_SESSION session,
+        @NotNull WebSession webSession,
+        @NotNull AUTH_SESSION session,
         @NotNull WebUser user) throws DBException;
 
 }

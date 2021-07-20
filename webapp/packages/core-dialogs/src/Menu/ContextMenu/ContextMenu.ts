@@ -1,19 +1,20 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { TLocalizationToken } from '@cloudbeaver/core-localization';
+import type { TLocalizationToken } from '@cloudbeaver/core-localization';
 import { uuid } from '@cloudbeaver/core-utils';
 
-import { IMenuPanel } from '../IMenuPanel';
+import type { IMenuPanel } from '../IMenuPanel';
+import { ComputedContextMenuModel } from '../models/ComputedContextMenuModel';
 import { ComputedMenuItemModel, IComputedMenuItemOptions } from '../models/ComputedMenuItemModel';
-import { MenuOptionsStore } from '../models/MenuOptionsStore';
-import { IContextMenuItem } from './IContextMenuItem';
-import { IMenuContext } from './IMenuContext';
+import { MenuItemType, MenuOptionsStore } from '../models/MenuOptionsStore';
+import type { IContextMenuItem } from './IContextMenuItem';
+import type { IMenuContext } from './IMenuContext';
 
 /**
  * this class allows to store IContextMenuItem in a tree structure
@@ -48,8 +49,14 @@ export class ContextMenu {
     const modelOptions = new ComputedMenuItemOptionsWithContext(params, context);
     const model = new ComputedMenuItemModel(modelOptions);
 
-    if (params.isPanel) {
+    if (params.isPanel && !params.panel) {
       model.panel = this.constructMenuPanelWithContext<T>(params.id, context);
+    } else if (params.panel instanceof ComputedContextMenuModel) {
+      const basePanel = params.panel;
+      model.panel = new ContextMenuPanel(
+        `${params.panel.id}-${context.contextId!}-panel`,
+        () => this.constructMenuItems(basePanel.options.menuItemsGetter(context), context),
+      );
     }
 
     return model;
@@ -85,18 +92,28 @@ class ComputedMenuItemOptionsWithContext<T> implements IComputedMenuItemOptions 
   // set title or getter
   title?: TLocalizationToken;
   titleGetter?: () => TLocalizationToken | undefined;
+  tooltip?: TLocalizationToken;
+  tooltipGetter?: () => TLocalizationToken | undefined;
   isDisabled?: () => boolean;
   isHidden?: () => boolean;
   // set icon or getter
   icon?: string;
+  isChecked?: () => boolean;
+  type?: MenuItemType;
+  separator?: boolean;
+  keepMenuOpen?: boolean;
   iconGetter?: () => string | undefined;
 
   constructor(private options: IContextMenuItem<T>,
     private context: IMenuContext<T>) {
     // doesn't depend on context
     this.title = options.title;
-    this.titleGetter = options.titleGetter;
+    this.tooltip = options.tooltip;
+    this.tooltipGetter = options.tooltipGetter;
     this.icon = options.icon;
+    this.type = options.type;
+    this.separator = options.separator;
+    this.keepMenuOpen = options.keepMenuOpen;
     this.iconGetter = options.iconGetter;
 
     this.id = `${options.id}-${context.contextId!}`;
@@ -109,6 +126,12 @@ class ComputedMenuItemOptionsWithContext<T> implements IComputedMenuItemOptions 
     }
     if (options.isHidden) {
       this.isHidden = () => options.isHidden!(this.context);
+    }
+    if (options.isChecked) {
+      this.isChecked = () => options.isChecked!(this.context);
+    }
+    if (options.titleGetter) {
+      this.titleGetter = () => options.titleGetter!(this.context);
     }
   }
 }

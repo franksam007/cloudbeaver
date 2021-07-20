@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,7 +53,11 @@ public interface DBWServiceAdmin extends DBWService {
 
     @WebAction(requirePermissions = DBWConstants.PERMISSION_ADMIN)
     @NotNull
-    AdminRoleInfo createRole(@NotNull WebSession webSession, String roleId) throws DBWebException;
+    AdminRoleInfo createRole(@NotNull WebSession webSession, String roleId, String roleName, String description) throws DBWebException;
+
+    @WebAction(requirePermissions = DBWConstants.PERMISSION_ADMIN)
+    @NotNull
+    AdminRoleInfo updateRole(@NotNull WebSession webSession, String roleId, String roleName, String description) throws DBWebException;
 
     @WebAction(requirePermissions = DBWConstants.PERMISSION_ADMIN)
     boolean deleteRole(@NotNull WebSession webSession, String roleId) throws DBWebException;
@@ -74,14 +78,14 @@ public interface DBWServiceAdmin extends DBWService {
     // Connection management
 
     @WebAction(requirePermissions = DBWConstants.PERMISSION_ADMIN)
-    List<WebConnectionInfo> getAllConnections(@NotNull WebSession webSession) throws DBWebException;
+    List<WebConnectionInfo> getAllConnections(@NotNull WebSession webSession, @Nullable String id) throws DBWebException;
     @WebAction(requirePermissions = DBWConstants.PERMISSION_ADMIN)
     List<AdminConnectionSearchInfo> searchConnections(WebSession webSession, List<String> hostNames) throws DBWebException;
 
     @WebAction(requirePermissions = DBWConstants.PERMISSION_ADMIN)
     WebConnectionInfo createConnectionConfiguration(@NotNull WebSession webSession, @NotNull WebConnectionConfig config) throws DBWebException;
     @WebAction(requirePermissions = DBWConstants.PERMISSION_ADMIN)
-    WebConnectionInfo copyConnectionConfiguration(@NotNull WebSession webSession, @NotNull String nodePath) throws DBWebException;
+    WebConnectionInfo copyConnectionConfiguration(@NotNull WebSession webSession, @NotNull String nodePath, @NotNull WebConnectionConfig config) throws DBWebException;
     @WebAction(requirePermissions = DBWConstants.PERMISSION_ADMIN)
     WebConnectionInfo updateConnectionConfiguration(@NotNull WebSession webSession, @NotNull String id, @NotNull WebConnectionConfig config) throws DBWebException;
     @WebAction(requirePermissions = DBWConstants.PERMISSION_ADMIN)

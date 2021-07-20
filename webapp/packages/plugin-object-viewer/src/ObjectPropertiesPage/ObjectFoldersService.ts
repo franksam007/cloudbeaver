@@ -1,15 +1,15 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { action } from 'mobx';
+import { action, makeObservable } from 'mobx';
 
 import { TabEntity } from '@cloudbeaver/core-app';
-import { ITab } from '@cloudbeaver/core-blocks';
+import type { ITab } from '@cloudbeaver/core-blocks';
 import { Entity, injectable, RootContainerService } from '@cloudbeaver/core-di';
 
 import { ObjectFoldersTabService } from './ObjectFoldersTab/ObjectFoldersTabService';
@@ -35,10 +35,13 @@ export class ObjectFoldersService {
     private objectFoldersTabService: ObjectFoldersTabService,
     private rootContainerService: RootContainerService
   ) {
+    makeObservable(this, {
+      createTabsContainer: action,
+    });
+
     this.rootContainerService.registerEntityInRootContainer(this.tabContainersStorage);
   }
 
-  @action
   createTabsContainer(nodeId: string): ObjectFoldersTabContainer {
     const tabContainer = new ObjectFoldersTabContainer(nodeId);
     this.tabContainersStorage.addChild(tabContainer);

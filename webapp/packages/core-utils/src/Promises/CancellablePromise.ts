@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,12 @@ export type CancellableExecutor<T> = (
  * 'then' method returns the ordinary promise
  */
 export class CancellablePromise<T> extends Promise<T> {
-  private _resolve: (value?: T | PromiseLike<T>) => void;
+  private _resolve: (value: T | PromiseLike<T>) => void;
   private _reject: (reason?: any) => void;
   private _cancel?: () => void;
 
   constructor(executor: CancellableExecutor<T>) {
-    let _resolve!: (value?: T | PromiseLike<T>) => void;
+    let _resolve!: (value: T | PromiseLike<T>) => void;
     let _reject!: (reason?: any) => void;
     super((resolve, reject) => {
       _resolve = resolve;

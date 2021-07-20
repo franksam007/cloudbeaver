@@ -1,27 +1,25 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 
-import { ResultDataFormat } from '@cloudbeaver/core-sdk';
+import type { ResultDataFormat } from '@cloudbeaver/core-sdk';
 import { uuid } from '@cloudbeaver/core-utils';
 
-import { DatabaseDataAccessMode, IDatabaseDataModel } from './IDatabaseDataModel';
-import { IDatabaseDataResult } from './IDatabaseDataResult';
-import { IDatabaseDataSource, IRequestInfo } from './IDatabaseDataSource';
+import type { IDatabaseDataModel } from './IDatabaseDataModel';
+import type { IDatabaseDataResult } from './IDatabaseDataResult';
+import type { DatabaseDataAccessMode, IDatabaseDataSource, IRequestInfo } from './IDatabaseDataSource';
 
 export class DatabaseDataModel<TOptions, TResult extends IDatabaseDataResult = IDatabaseDataResult>
 implements IDatabaseDataModel<TOptions, TResult> {
   id: string;
-  @observable results: TResult[];
   source: IDatabaseDataSource<TOptions, TResult>;
-  @observable access: DatabaseDataAccessMode;
-  @observable countGain: number;
+  countGain: number;
 
   get requestInfo(): IRequestInfo {
     return this.source.requestInfo;
@@ -32,28 +30,42 @@ implements IDatabaseDataModel<TOptions, TResult> {
   }
 
   constructor(source: IDatabaseDataSource<TOptions, TResult>) {
+    makeObservable(this, {
+      countGain: observable,
+    });
+
     this.id = uuid();
     this.source = source;
     this.countGain = 0;
-    this.results = [];
-    this.access = DatabaseDataAccessMode.Default;
   }
 
   isLoading(): boolean {
     return this.source.isLoading();
   }
 
-  async refresh(): Promise<void> {
-    await this.requestData();
+  isDisabled(resultIndex: number): boolean {
+    return this.source.isDisabled(resultIndex);
   }
 
-  async reload(): Promise<void> {
-    this.setSlice(0, this.countGain);
-    await this.requestData();
+  isReadonly(): boolean {
+    return this.source.isReadonly();
+  }
+
+  isDataAvailable(offset: number, count: number): boolean {
+    return this.source.offset <= offset && this.source.count >= count;
+  }
+
+  getResult(index: number): TResult | null {
+    return this.source.getResult(index);
   }
 
   setResults(results: TResult[]): this {
-    this.results = results;
+    this.source.setResults(results);
+    return this;
+  }
+
+  setAccess(access: DatabaseDataAccessMode): this {
+    this.source.setAccess(access);
     return this;
   }
 
@@ -62,20 +74,7 @@ implements IDatabaseDataModel<TOptions, TResult> {
     return this;
   }
 
-  getResult(index: number): TResult | null {
-    if (this.results.length > index) {
-      return this.results[index];
-    }
-
-    return null;
-  }
-
-  setAccess(access: DatabaseDataAccessMode): this {
-    this.access = access;
-    return this;
-  }
-
-  setSlice(offset: number, count: number): this {
+  setSlice(offset: number, count = this.countGain): this {
     this.source.setSlice(offset, count);
     return this;
   }
@@ -95,7 +94,35 @@ implements IDatabaseDataModel<TOptions, TResult> {
     return this;
   }
 
+  async retry(): Promise<void> {
+    await this.source.retry();
+  }
+
+  async refresh(): Promise<void> {
+    await this.requestData();
+  }
+
+  async reload(): Promise<void> {
+    this.setSlice(0, this.countGain);
+    await this.requestData();
+  }
+
+  async requestDataPortion(offset: number, count: number): Promise<void> {
+    if (!this.isDataAvailable(offset, count)) {
+      this.source.setSlice(offset, count);
+      await this.source.requestData();
+    }
+  }
+
   async requestData(): Promise<void> {
-    this.results = await this.source.requestData(this.results);
+    await this.source.requestData();
+  }
+
+  cancel(): Promise<void> | void {
+    return this.source.cancel();
+  }
+
+  async dispose(): Promise<void> {
+    await this.source.dispose();
   }
 }

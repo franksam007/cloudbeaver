@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { ReactElement } from 'react';
+export type TabPanelElement = React.FunctionComponent<any> | (() => React.ReactElement | null);
 
 export interface ITab {
   tabId: string;
@@ -16,7 +16,7 @@ export interface ITab {
   onClose?: () => void;
   onActivate: () => void;
 
-  panel: () => ReactElement | null;
+  panel: TabPanelElement;
 }
 
 export interface ITabContainer {

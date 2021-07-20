@@ -9,12 +9,13 @@
   "types": "src/index.ts",
   "scripts": {
     "prebuild": "rimraf lib/*",
-    "build": "webpack --config ../../configs/webpack.plugin.config",
+    "build": "webpack --config ../../configs/webpack.plugin.config.js",
     "postbuild": "tsc",
     "lint": "eslint ./src/ --ext .ts,.tsx",
     "lint-fix": "eslint ./src/ --ext .ts,.tsx --fix"
   },
   "peerDependencies": {
+    "@cloudbeaver/plugin-codemirror": "^0.1.0",
     "@cloudbeaver/plugin-object-viewer": "^0.1.0",
     "@cloudbeaver/core-app": "^0.1.0",
     "@cloudbeaver/core-blocks": "^0.1.0",
@@ -35,7 +36,7 @@
     "react": "^16.x.x",
     "rxjs": "^6.x.x",
     "mobx": "^5.x.x",
-    "mobx-react": "^6.x.x",
-    "reshadow": "^0.0.1-alpha.78"
+    "mobx-react-lite": "^3.x.x",
+    "reshadow": "^0.x.x"
   }
 }

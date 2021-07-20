@@ -1,23 +1,23 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import styled, { css } from 'reshadow';
 
 import {
-  TabsState, TabList, IconButton, Loader, StaticImage, Icon, BORDER_TAB_STYLES, TabPanelList
+  TabsState, TabList, IconButton, Loader, StaticImage, Icon, BORDER_TAB_STYLES, TabPanelList, useMapResource
 } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { useTranslate } from '@cloudbeaver/core-localization';
 import { useStyles, composes } from '@cloudbeaver/core-theming';
 
-import { ConnectionForm } from '../ConnectionForm/ConnectionForm';
-import { IConnectionFormModel } from '../ConnectionForm/IConnectionFormModel';
+import { ConnectionForm } from '../../../ConnectionForm/ConnectionForm';
+import { DBDriverResource } from '../../../DBDriverResource';
 import { CreateConnectionService } from '../CreateConnectionService';
 
 const styles = composes(
@@ -42,7 +42,7 @@ const styles = composes(
     connection-create {
       display: flex;
       flex-direction: column;
-      height: 556px;
+      height: 700px;
       overflow: hidden;
     }
 
@@ -72,15 +72,10 @@ const styles = composes(
     title-bar {
       composes: theme-typography--headline6 from global;
       padding: 16px 24px;
-      border-top: solid 1px;
       align-items: center;
       display: flex;
       font-weight: 400;
       flex: auto 0 0;
-    }
-
-    IconButton {
-      color: rgba(0, 0, 0, 0.45);
     }
 
     StaticImage {
@@ -117,27 +112,27 @@ interface Props {
 
 export const CreateConnection = observer(function CreateConnection({
   method,
-  configurationWizard,
 }: Props) {
   const style = useStyles(styles);
-  const service = useService(CreateConnectionService);
+  const createConnectionService = useService(CreateConnectionService);
   const translate = useTranslate();
+  const driver = useMapResource(DBDriverResource, createConnectionService.data?.config.driverId || null);
 
-  if (service.connection) {
+  if (createConnectionService.data) {
     return styled(style)(
       <connection-create as='div'>
         <title-bar as='div'>
-          <back-button as='div'><Icon name="angle" viewBox="0 0 15 8" onClick={service.clearConnectionTemplate} /></back-button>
-          {service.driver?.icon && <StaticImage icon={service.driver.icon} />}
-          {service.driver?.name ?? translate('connections_administration_connection_create')}
+          <back-button as='div'><Icon name="angle" viewBox="0 0 15 8" onClick={createConnectionService.clearConnectionTemplate} /></back-button>
+          {driver.data?.icon && <StaticImage icon={driver.data.icon} />}
+          {driver.data?.name ?? translate('connections_administration_connection_create')}
           <fill as="div" />
-          <IconButton name="cross" viewBox="0 0 24 24" onClick={service.cancelCreate} />
+          <IconButton name="cross" viewBox="0 0 24 24" onClick={createConnectionService.cancelCreate} />
         </title-bar>
         <connection-create-content as='div'>
           <ConnectionForm
-            model={service as IConnectionFormModel}
-            onBack={service.clearConnectionTemplate}
-            onCancel={service.clearConnectionTemplate}
+            state={createConnectionService.data}
+            onCancel={createConnectionService.clearConnectionTemplate}
+            onSave={createConnectionService.clearConnectionTemplate}
           />
         </connection-create-content>
         <connection-create-footer as='div' />
@@ -149,20 +144,20 @@ export const CreateConnection = observer(function CreateConnection({
     <connection-create as='div'>
       <TabsState
         currentTabId={method}
-        container={service.tabsContainer}
+        container={createConnectionService.tabsContainer}
         manual
         lazy
-        onChange={({ tabId }) => service.setCreateMethod(tabId)}
+        onChange={({ tabId }) => createConnectionService.setCreateMethod(tabId)}
       >
         <title-bar as='div'>
           {translate('connections_administration_connection_create')}
           <fill as="div" />
-          <IconButton name="cross" viewBox="0 0 16 16" onClick={service.cancelCreate} />
+          <IconButton name="cross" viewBox="0 0 16 16" onClick={createConnectionService.cancelCreate} />
         </title-bar>
         <TabList style={[style, BORDER_TAB_STYLES]} />
         <connection-create-content as='div'>
           <TabPanelList style={[style, BORDER_TAB_STYLES]} />
-          {service.disabled && <Loader overlay />}
+          {createConnectionService.disabled && <Loader overlay />}
         </connection-create-content>
         <connection-create-footer as='div' />
       </TabsState>

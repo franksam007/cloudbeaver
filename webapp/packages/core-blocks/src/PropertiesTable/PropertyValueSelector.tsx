@@ -1,13 +1,13 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
-import { useCallback, useEffect } from 'react';
+import { observer } from 'mobx-react-lite';
+import React, { useCallback, useEffect } from 'react';
 import {
   useMenuState,
   Menu,
@@ -57,25 +57,25 @@ const styles = composes(
   `
 );
 
-type Props = React.PropsWithChildren<{
+interface Props {
   propertyName?: string;
   values: string[];
   onSelect: (value: string) => void;
   onSwitch: (state: boolean) => void;
-}>;
+}
 
-export const PropertyValueSelector = observer(function PropertyValueSelector({
+export const PropertyValueSelector: React.FC<Props> = observer(function PropertyValueSelector({
   propertyName,
   values,
   children,
   onSelect,
   onSwitch,
-}: Props) {
+}) {
   const menu = useMenuState();
   const handleMenuSelect = useCallback(
-    (value: string) => {
+    (event: React.MouseEvent<HTMLButtonElement>) => {
       menu.hide();
-      onSelect(value);
+      onSelect(event.currentTarget.id);
     },
     [menu, onSelect]
   );
@@ -85,8 +85,8 @@ export const PropertyValueSelector = observer(function PropertyValueSelector({
     <>
       <MenuButton {...menu}>{children}</MenuButton>
       <Menu {...menu} aria-label={propertyName}>
-        {values.map(value => (
-          <MenuItem key={value} type='button' {...menu} onClick={() => handleMenuSelect(value)}>
+        {menu.visible && values.map(value => (
+          <MenuItem key={value} id={value} type='button' {...menu} onClick={handleMenuSelect}>
             {value}
           </MenuItem>
         ))}

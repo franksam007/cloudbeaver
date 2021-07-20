@@ -1,48 +1,50 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable, computed } from 'mobx';
 
 import { injectable } from '@cloudbeaver/core-di';
-import { CommonDialogService } from '@cloudbeaver/core-dialogs';
 
-import { IDatabaseDataModel } from '../DatabaseDataModel/IDatabaseDataModel';
-import { IDatabaseDataResult } from '../DatabaseDataModel/IDatabaseDataResult';
-import { IDatabaseDataSource } from '../DatabaseDataModel/IDatabaseDataSource';
+import type { IDatabaseDataModel } from '../DatabaseDataModel/IDatabaseDataModel';
+import type { IDatabaseDataResult } from '../DatabaseDataModel/IDatabaseDataResult';
+import type { IDatabaseDataSource } from '../DatabaseDataModel/IDatabaseDataSource';
 import { DataModelWrapper } from './DataModelWrapper';
-import { ITableViewerModelOptions } from './TableViewerModel';
 
 @injectable()
 export class TableViewerStorageService {
-  @observable private tableModelMap: Map<string, IDatabaseDataModel<any, any>> = new Map();
+  private tableModelMap: Map<string, IDatabaseDataModel<any, any>> = new Map();
 
-  constructor(private commonDialogService: CommonDialogService) {}
+  get values(): Array<IDatabaseDataModel<any, any>> {
+    return Array.from(this.tableModelMap.values());
+  }
+
+  constructor() {
+    makeObservable<this, 'tableModelMap'>(this, {
+      tableModelMap: observable,
+      values: computed,
+    });
+  }
 
   has(tableId: string): boolean {
     return this.tableModelMap.has(tableId);
   }
 
-  get(tableId: string): DataModelWrapper | null | undefined {
-    return this.tableModelMap.get(tableId) as DataModelWrapper;
+  get<T extends IDatabaseDataModel<any, any>>(tableId: string): T | undefined {
+    return this.tableModelMap.get(tableId) as any;
   }
 
   /**
    * @deprecated Use add method instead
    */
   create(
-    options: ITableViewerModelOptions,
     source: IDatabaseDataSource<any, any>
   ): DataModelWrapper {
-    return this.add(new DataModelWrapper(
-      this.commonDialogService,
-      options,
-      source
-    )) as DataModelWrapper;
+    return this.add(new DataModelWrapper(source)) as DataModelWrapper;
   }
 
   add<TOptions, TResult extends IDatabaseDataResult>(

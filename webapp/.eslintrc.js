@@ -34,6 +34,7 @@ module.exports = {
   },
 
   rules: {
+    '@typescript-eslint/no-invalid-void-type': 'off',
     '@typescript-eslint/dot-notation': 'off',
     '@typescript-eslint/no-throw-literal': 'off',
     '@typescript-eslint/no-base-to-string': 'off',
@@ -84,7 +85,7 @@ module.exports = {
         ignoreTrailingComments: true,
         ignoreStrings: true,
         ignoreTemplateLiterals: true,
-        ignorePattern: "^export\\s(const\\s\\w+:?.+=.+function\\s|function\\s)\\w+\\s*\\(\\s*\\{$"
+        ignorePattern: "^export\\s(const\\s\\w+:?.+=.+function\\s|function\s)\\w+\\s*\\(.*\\{$"
       }
     ],
     'import-helpers/order-imports': [

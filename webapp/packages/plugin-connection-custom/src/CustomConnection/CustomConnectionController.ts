@@ -1,52 +1,53 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable, computed } from 'mobx';
+import { observable, computed, makeObservable } from 'mobx';
 
 import { DBDriver, DBDriverResource } from '@cloudbeaver/core-connections';
 import { injectable, IInitializableController } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
-
-export enum ConnectionStep {
-  Driver,
-  Connection
-}
+import { PublicConnectionFormService } from '@cloudbeaver/plugin-connections';
 
 @injectable()
 export class CustomConnectionController implements IInitializableController {
-  @observable step = ConnectionStep.Driver;
-  @observable isLoading = true;
-  @observable driver: DBDriver | null = null;
+  isLoading = true;
+  onClose!: () => void;
 
-  @computed
   get drivers(): DBDriver[] {
-    return Array
-      .from(this.dbDriverResource.data.values())
-      .sort((a, b) => this.sortDrivers(a, b));
+    return this.dbDriverResource.values
+      .sort(this.dbDriverResource.compare);
   }
 
   constructor(
     private dbDriverResource: DBDriverResource,
-    private notificationService: NotificationService
-  ) { }
-
-  init() {
-    this.loadDBDrivers();
+    private notificationService: NotificationService,
+    private readonly publicConnectionFormService: PublicConnectionFormService
+  ) {
+    makeObservable(this, {
+      isLoading: observable,
+      drivers: computed,
+    });
   }
 
-  onStep = (step: ConnectionStep) => {
-    this.step = step;
-  };
+  init(onClose: () => void): void {
+    this.loadDBDrivers();
+    this.onClose = onClose;
+  }
 
-  onDriverSelect = (driverId: string) => {
-    this.driver = this.dbDriverResource.get(driverId)!;
+  onDriverSelect = async (driverId: string) => {
+    const state = await this.publicConnectionFormService.open(
+      { driverId },
+      this.dbDriverResource.keys
+    );
 
-    this.step = ConnectionStep.Connection;
+    if (state) {
+      this.onClose();
+    }
   };
 
   private async loadDBDrivers() {
@@ -57,13 +58,5 @@ export class CustomConnectionController implements IInitializableController {
     } finally {
       this.isLoading = false;
     }
-  }
-
-  private sortDrivers(driverA: DBDriver, driverB: DBDriver): number {
-    if (driverA.promotedScore === driverB.promotedScore) {
-      return (driverA.name || '').localeCompare((driverB.name || ''));
-    }
-
-    return (driverB.promotedScore || 0) - (driverA.promotedScore || 0);
   }
 }

@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -11,9 +11,9 @@ import { autorun } from 'mobx';
 import { ITab, NavigationTabsService } from '@cloudbeaver/core-app';
 import { IDestructibleController, IInitializableController, injectable } from '@cloudbeaver/core-di';
 
-import { IObjectViewerTabState } from '../IObjectViewerTabState';
+import type { IObjectViewerTabState } from '../IObjectViewerTabState';
 import { ObjectFoldersService } from './ObjectFoldersService';
-import { ObjectFoldersTabContainer } from './ObjectFoldersTabsContainer/ObjectFoldersTabContainer';
+import type { ObjectFoldersTabContainer } from './ObjectFoldersTabsContainer/ObjectFoldersTabContainer';
 
 @injectable()
 export class ObjectFoldersController implements IInitializableController, IDestructibleController {
@@ -26,7 +26,7 @@ export class ObjectFoldersController implements IInitializableController, IDestr
     private navigationTabsService: NavigationTabsService
   ) { }
 
-  getTabContainer() {
+  getTabContainer(): ObjectFoldersTabContainer {
     return this.tabContainer;
   }
 
@@ -43,7 +43,7 @@ export class ObjectFoldersController implements IInitializableController, IDestr
     });
   }
 
-  activateTab(folderId: string | null) {
+  private activateTab(folderId: string | null): void {
     try {
       this.tabContainer.activateTab(folderId);
     } catch {
@@ -52,7 +52,7 @@ export class ObjectFoldersController implements IInitializableController, IDestr
     }
   }
 
-  activateFirstTab() {
+  private activateFirstTab() {
     const firstTab = this.tabContainer.tabs[0];
     this.tabContainer.activateTab(firstTab?.tabId || null);
   }

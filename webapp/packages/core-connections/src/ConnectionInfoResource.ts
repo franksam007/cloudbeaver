@@ -1,42 +1,68 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { action } from 'mobx';
+import { action, makeObservable, runInAction } from 'mobx';
 
-import { AppAuthService } from '@cloudbeaver/core-authentication';
 import { injectable } from '@cloudbeaver/core-di';
-import { Executor, IExecutor } from '@cloudbeaver/core-executor';
-import { SessionResource } from '@cloudbeaver/core-root';
+import { Executor, ExecutorInterrupter, IExecutor } from '@cloudbeaver/core-executor';
+import { NavigatorViewSettings, SessionDataResource } from '@cloudbeaver/core-root';
 import {
-  UserConnectionFragment,
   GraphQLService,
   CachedMapResource,
   ConnectionConfig,
   UserConnectionAuthPropertiesFragment,
-  resourceKeyList
+  resourceKeyList,
+  InitConnectionMutationVariables,
+  GetUserConnectionsQueryVariables,
+  ResourceKey,
+  ResourceKeyUtils,
+  TestConnectionMutation,
+  NavigatorSettingsInput,
+  ResourceKeyList,
 } from '@cloudbeaver/core-sdk';
 
-import { ConnectionsResource } from './Administration/ConnectionsResource';
+import { ConnectionsResource, DatabaseConnection } from './Administration/ConnectionsResource';
 
-export type Connection = UserConnectionFragment & { authProperties?: UserConnectionAuthPropertiesFragment[] };
+export type Connection = DatabaseConnection & { authProperties?: UserConnectionAuthPropertiesFragment[] };
+export type ConnectionInitConfig = Omit<InitConnectionMutationVariables, 'includeOrigin' | 'customIncludeOriginDetails' | 'includeAuthProperties' | 'customIncludeNetworkHandlerCredentials'>;
+export type ConnectionInfoIncludes = Omit<GetUserConnectionsQueryVariables, 'id'>;
+
+export const DEFAULT_NAVIGATOR_VIEW_SETTINGS: NavigatorSettingsInput = {
+  showOnlyEntities: false,
+  hideFolders: false,
+  hideVirtualModel: false,
+  hideSchemas: false,
+  mergeEntities: false,
+  showSystemObjects: false,
+  showUtilityObjects: false,
+};
 
 @injectable()
-export class ConnectionInfoResource extends CachedMapResource<string, Connection> {
+export class ConnectionInfoResource extends CachedMapResource<string, Connection, ConnectionInfoIncludes> {
   readonly onConnectionCreate: IExecutor<Connection>;
   readonly onConnectionClose: IExecutor<Connection>;
+
   private sessionUpdate: boolean;
   constructor(
     private graphQLService: GraphQLService,
     private connectionsResource: ConnectionsResource,
-    appAuthService: AppAuthService,
-    sessionResource: SessionResource
+    sessionDataResource: SessionDataResource
   ) {
-    super(new Map());
+    super();
+
+    makeObservable(this, {
+      refreshUserConnections: action,
+      createFromTemplate: action,
+      createConnection: action,
+      createFromNode: action,
+      add: action,
+    });
+
     this.onConnectionCreate = new Executor();
     this.onConnectionClose = new Executor();
     this.sessionUpdate = false;
@@ -44,18 +70,19 @@ export class ConnectionInfoResource extends CachedMapResource<string, Connection
     // in case when session was refreshed all data depended on connection info
     // should be refreshed by session update executor
     // it's prevents double nav tree refresh
-    this.onItemAdd.addHandler(() => !this.sessionUpdate);
-    this.onItemDelete.addHandler(() => !this.sessionUpdate);
-    this.onConnectionCreate.addHandler(() => !this.sessionUpdate);
-    sessionResource.onDataOutdated.addHandler(() => this.markOutdated());
-    appAuthService.auth.addHandler(() => this.refreshSession(true));
+    // this.onItemAdd.addHandler(ExecutorInterrupter.interrupter(() => this.sessionUpdate));
+    this.onItemDelete.addHandler(ExecutorInterrupter.interrupter(() => this.sessionUpdate));
+    this.onConnectionCreate.addHandler(ExecutorInterrupter.interrupter(() => this.sessionUpdate));
+
+    sessionDataResource.onDataOutdated.addHandler(() => this.markOutdated());
+    sessionDataResource.onDataUpdate.addHandler(() => this.refreshUserConnections(true));
   }
 
-  @action async refreshSession(sessionUpdate?: boolean): Promise<void> {
+  async refreshUserConnections(sessionUpdate?: boolean): Promise<void> {
     this.sessionUpdate = sessionUpdate === true;
     try {
       const connectionsList = resourceKeyList(Array.from(this.data.keys()));
-      await this.performUpdate(connectionsList, async () => {
+      await this.performUpdate(connectionsList, [], async () => {
         if (!sessionUpdate) {
           const updated = await this.connectionsResource.updateSessionConnections();
 
@@ -64,47 +91,79 @@ export class ConnectionInfoResource extends CachedMapResource<string, Connection
           }
         }
 
-        const { state: { connections } } = await this.graphQLService.sdk.getSessionConnections();
+        this.resetIncludes();
+        const { connections } = await this.graphQLService.sdk.getUserConnections({
+          ...this.getDefaultIncludes(),
+          ...this.getIncludesMap(),
+        });
 
-        const restoredConnections = new Set<string>();
+        runInAction(() => {
+          const unrestoredConnectionIdList = Array.from(this.data.values())
+            .map(connection => connection.id)
+            .filter(connectionId => !connections.some(connection => connection.id === connectionId));
 
-        for (const connection of connections) {
-          await this.add(connection);
-          restoredConnections.add(connection.id);
-        }
+          this.delete(resourceKeyList(unrestoredConnectionIdList));
+        });
 
-        const unrestoredConnectionIdList = Array.from(this.data.values())
-          .map(connection => connection.id)
-          .filter(connectionId => !restoredConnections.has(connectionId));
-
-        this.delete(resourceKeyList(unrestoredConnectionIdList));
+        await this.addList(connections);
       });
     } finally {
       this.sessionUpdate = false;
     }
   }
 
-  @action async createFromTemplate(templateId: string): Promise<Connection> {
-    const { connection } = await this.graphQLService.sdk.createConnectionFromTemplate({ templateId });
-    return this.add(connection);
-  }
-
-  @action async createConnection(config: ConnectionConfig): Promise<Connection> {
-    const { connection } = await this.graphQLService.sdk.createConnection({
-      config,
+  async createFromTemplate(templateId: string, connectionName: string): Promise<Connection> {
+    const { connection } = await this.graphQLService.sdk.createConnectionFromTemplate({
+      templateId,
+      connectionName,
+      ...this.getDefaultIncludes(),
+      ...this.getIncludesMap(),
     });
     return this.add(connection);
   }
 
-  @action async createFromNode(nodeId: string): Promise<Connection> {
-    const { connection } = await this.graphQLService.sdk.createConnectionFromNode({ nodePath: nodeId });
+  async createConnection(config: ConnectionConfig): Promise<Connection> {
+    const { connection } = await this.graphQLService.sdk.createConnection({
+      config,
+      ...this.getDefaultIncludes(),
+      ...this.getIncludesMap(config.connectionId),
+    });
+    return this.add(connection);
+  }
+
+  async testConnection(config: ConnectionConfig): Promise<TestConnectionMutation['connection']> {
+    const { connection } = await this.graphQLService.sdk.testConnection({
+      config,
+    });
+
+    return connection;
+  }
+
+  async createFromNode(nodeId: string, nodeName: string): Promise<Connection> {
+    const { connection } = await this.graphQLService.sdk.createConnectionFromNode({
+      nodePath: nodeId,
+      config: { name: nodeName },
+      ...this.getDefaultIncludes(),
+      ...this.getIncludesMap(),
+    });
 
     return this.add(connection);
   }
 
-  @action async add(connection: Connection): Promise<Connection> {
+  async addList(connections: Connection[]): Promise<Connection[]> {
+    const newConnections = connections.filter(connection => !this.data.has(connection.id));
+    const key = this.updateConnection(...connections);
+
+    for (const connection of newConnections) {
+      await this.onConnectionCreate.execute(this.get(connection.id)!);
+    }
+
+    return this.get(key) as Connection[];
+  }
+
+  async add(connection: Connection): Promise<Connection> {
     const exists = this.data.has(connection.id);
-    this.set(connection.id, connection);
+    this.updateConnection(connection);
 
     const observedConnection = this.get(connection.id)!;
 
@@ -115,72 +174,104 @@ export class ConnectionInfoResource extends CachedMapResource<string, Connection
     return observedConnection;
   }
 
-  async init(id: string, credentials?: Record<string, any>, saveCredentials?: boolean): Promise<Connection> {
-    await this.performUpdate(id, async () => {
-      const connection = await this.initConnection(id, credentials, saveCredentials);
-      this.set(id, connection);
+  async init(config: ConnectionInitConfig): Promise<Connection> {
+    await this.performUpdate(config.id, [], async () => {
+      const { connection } = await this.graphQLService.sdk.initConnection({
+        ...config,
+        ...this.getDefaultIncludes(),
+        ...this.getIncludesMap(),
+      });
+      this.updateConnection(connection);
+    });
+
+    return this.get(config.id)!;
+  }
+
+  async changeConnectionView(id: string, settings: NavigatorViewSettings): Promise<Connection> {
+    await this.performUpdate(id, [], async () => {
+      const connectionNavigatorViewSettings = this.get(id)?.navigatorSettings || DEFAULT_NAVIGATOR_VIEW_SETTINGS;
+      const { connection } = await this.graphQLService.sdk.setConnectionNavigatorSettings({
+        id,
+        settings: { ...connectionNavigatorViewSettings, ...settings },
+        ...this.getDefaultIncludes(),
+        ...this.getIncludesMap(id),
+      });
+
+      this.updateConnection(connection);
     });
 
     return this.get(id)!;
   }
 
-  async close(connectionId: string): Promise<Connection> {
-    await this.performUpdate(connectionId, async () => {
-      const connection = await this.closeConnection(connectionId);
-      this.set(connectionId, connection);
+  async update(config: ConnectionConfig): Promise<DatabaseConnection> {
+    await this.performUpdate(config.connectionId!, [], async () => {
+      const { connection } = await this.graphQLService.sdk.updateConnection({
+        config,
+        ...this.getDefaultIncludes(),
+        ...this.getIncludesMap(config.connectionId!),
+      });
+
+      this.updateConnection(connection);
+    });
+    return this.get(config.connectionId!)!;
+  }
+
+  async close(id: string): Promise<Connection> {
+    await this.performUpdate(id, [], async () => {
+      const { connection } = await this.graphQLService.sdk.closeConnection({
+        id,
+        ...this.getDefaultIncludes(),
+        ...this.getIncludesMap(id),
+      });
+
+      this.updateConnection(connection);
     });
 
-    const connection = this.get(connectionId)!;
+    const connection = this.get(id)!;
     await this.onConnectionClose.execute(connection);
     return connection;
   }
 
-  async deleteConnection(connectionId: string): Promise<void> {
-    await this.performUpdate(connectionId, async () => {
-      await this.graphQLService.sdk.deleteConnection({ id: connectionId });
+  async deleteConnection(id: string): Promise<void> {
+    await this.performUpdate(id, [], async () => {
+      await this.graphQLService.sdk.deleteConnection({ id: id });
     });
-    this.delete(connectionId);
+    this.delete(id);
   }
 
-  async loadAuthModel(connectionId: string): Promise<UserConnectionAuthPropertiesFragment[]> {
-    const connection = await this.load(connectionId);
+  protected async loader(key: ResourceKey<string>, includes: string[]): Promise<Map<string, Connection>> {
+    await ResourceKeyUtils.forEachAsync(key, async key => {
+      const { connections } = await this.graphQLService.sdk.getUserConnections({
+        id: key,
+        ...this.getDefaultIncludes(),
+        ...this.getIncludesMap(key, includes),
+      });
 
-    if (connection?.authProperties) {
-      return connection.authProperties;
-    }
-
-    return this.performUpdate(connectionId, async () => {
-      connection.authProperties = await this.getAuthProperties(connectionId);
-      this.set(connectionId, connection);
-
-      return connection.authProperties!;
+      this.updateConnection(...connections);
     });
-  }
-
-  protected async loader(connectionId: string): Promise<Map<string, Connection>> {
-    const { connection } = await this.graphQLService.sdk.connectionInfo({ id: connectionId });
-
-    const oldConnection = this.get(connectionId) || {};
-    this.set(connectionId, { ...oldConnection, ...connection });
 
     return this.data;
   }
 
-  private async getAuthProperties(id: string): Promise<UserConnectionAuthPropertiesFragment[]> {
-    const { connection: { authProperties } } = await this.graphQLService.sdk.connectionAuthProperties({ id });
+  private updateConnection(...connections: Connection[]): ResourceKeyList<string> {
+    const key = resourceKeyList(connections.map(connection => connection.id));
 
-    return authProperties;
+    const oldConnection = this.get(key);
+    this.set(key, oldConnection.map((connection, i) => ({ ...connection, ...connections[i] })));
+
+    return key;
   }
 
-  private async initConnection(id: string, credentials?: any, saveCredentials?: boolean): Promise<Connection> {
-    const { connection } = await this.graphQLService.sdk.initConnection({ id, credentials, saveCredentials });
-
-    return connection;
+  private getDefaultIncludes(): ConnectionInfoIncludes {
+    return {
+      customIncludeNetworkHandlerCredentials: false,
+      customIncludeOriginDetails: false,
+      includeAuthProperties: false,
+      includeOrigin: true,
+    };
   }
+}
 
-  private async closeConnection(id: string): Promise<Connection> {
-    const { connection } = await this.graphQLService.sdk.closeConnection({ id });
-
-    return connection;
-  }
+export function compareConnectionsInfo(a: DatabaseConnection, b: DatabaseConnection): number {
+  return (a.name).localeCompare(b.name);
 }

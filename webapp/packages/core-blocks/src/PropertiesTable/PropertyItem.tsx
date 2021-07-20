@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import {
   useCallback, useRef, useState, useLayoutEffect
 } from 'react';
@@ -15,8 +15,8 @@ import styled, { css, use } from 'reshadow';
 import { composes, useStyles } from '@cloudbeaver/core-theming';
 
 import { ShadowInput } from '../FormControls/ShadowInput';
-import { Icon } from '../Icons';
-import { IProperty } from './IProperty';
+import { Icon } from '../Icon';
+import type { IProperty } from './IProperty';
 import { PropertyValueSelector } from './PropertyValueSelector';
 
 const styles = composes(
@@ -25,7 +25,7 @@ const styles = composes(
       composes: theme-ripple from global;
     }
     ShadowInput {
-      composes: theme-background-surface from global;
+      composes: theme-background-surface theme-border-color-positive from global;
     }
     [|error] {
       composes: theme-text-error from global;
@@ -77,14 +77,14 @@ const styles = composes(
       color: inherit;
       width: 100%;
       outline: none;
-      border: solid 1px #01cca3;
+      border: solid 1px;
 
       &[|edited] {
         font-weight: 600;
       }
       &:global([readonly]), &:not(:focus):not([|focus]) {
         background: transparent;
-        border: solid 1px transparent;
+        border: solid 1px transparent !important;
       }
     }
     Icon {
@@ -92,10 +92,8 @@ const styles = composes(
       display: block;
     }
     property-select Icon {
-      transform: rotate(90deg);
-
       &[|focus] {
-        transform: rotate(-90deg);
+        transform: rotate(180deg);
       }
     }
     button {
@@ -128,6 +126,7 @@ export const PropertyItem = observer(function PropertyItem({
 }: Props) {
   const isDeletable = !readOnly && !property.displayName;
   const edited = value !== undefined && value !== property.defaultValue;
+  const propertyValue = value !== undefined ? value : property.defaultValue;
   const [focus, setFocus] = useState(false);
   const keyInputRef = useRef<HTMLInputElement>(null);
   const handleKeyChange = useCallback((key: string) => onNameChange(property.id, key), [property]);
@@ -158,7 +157,7 @@ export const PropertyItem = observer(function PropertyItem({
           {property.displayName || property.key}
         </ShadowInput>
       </property-name>
-      <property-value as='div'>
+      <property-value as='div' title={propertyValue}>
         <ShadowInput
           type='text'
           name={`${property.id}_value`}
@@ -168,7 +167,7 @@ export const PropertyItem = observer(function PropertyItem({
           onChange={handleValueChange}
           {...use({ focus, edited })}
         >
-          {value !== undefined ? value : property.defaultValue}
+          {propertyValue}
         </ShadowInput>
         {(!readOnly && property.validValues && property.validValues.length > 0) && (
           <property-select as="div">

@@ -1,106 +1,291 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
-import { PropsWithChildren, useCallback } from 'react';
+import { observable } from 'mobx';
+import { observer } from 'mobx-react-lite';
+import { useEffect } from 'react';
 import styled, { css } from 'reshadow';
 
-import { Loader, TextPlaceholder } from '@cloudbeaver/core-blocks';
+import { Loader, Pane, ResizerControls, Split, splitStyles, TextPlaceholder, useObjectRef } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
 import { ResultDataFormat } from '@cloudbeaver/core-sdk';
+import { composes, useStyles } from '@cloudbeaver/core-theming';
 
-import { DataPresentationService } from '../DataPresentationService';
+import { DataPresentationService, DataPresentationType } from '../DataPresentationService';
+import type { IDataTableActionsPrivate } from './IDataTableActions';
+import { TableError } from './TableError';
 import { TableFooter } from './TableFooter/TableFooter';
 import { TableGrid } from './TableGrid';
 import { TableHeader } from './TableHeader/TableHeader';
-import { TableLeftBar } from './TableLeftBar/TableLeftBar';
+import { TablePresentationBar } from './TablePresentationBar/TablePresentationBar';
+import { TableToolsPanel } from './TableToolsPanel';
 import { TableViewerStorageService } from './TableViewerStorageService';
 
-const viewerStyles = css`
-  table-viewer {
-    position: relative;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  table-content {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-  }
-  table-data {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    overflow: hidden;
-  }
-`;
+const viewerStyles = composes(
+  css`
+    pane-content {
+      composes: theme-background-surface theme-text-on-surface from global;
+    }
+    table-viewer {
+      composes: theme-background-secondary theme-text-on-secondary from global;
+    }
+  `,
+  css`
+    table-viewer {
+      position: relative;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 0 8px;
+    }
+    table-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    table-data, Pane, pane-content {
+      position: relative;
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    Pane {
+      &:first-child {
+        position: relative;
+        flex: 1;
 
-type TableViewerProps = PropsWithChildren<{
+        & pane-content {
+          margin-right: 4px;
+        }
+      }
+      &:last-child {
+        flex: 0 0 30%;
+
+        & pane-content {
+          margin-left: 4px;
+        }
+      }
+    }
+    Pane:global([data-mode='maximize']) pane-content {
+      margin: 0;
+    }
+    TablePresentationBar {
+      &:first-child {
+        margin-right: 4px;
+      }
+      &:last-child {
+        margin-left: 4px;
+      }
+    }
+    Loader {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+  `
+);
+
+interface Props {
   tableId: string;
   resultIndex: number | undefined;
   presentationId: string | undefined;
+  valuePresentationId: string | null | undefined;
   className?: string;
   onPresentationChange: (id: string) => void;
-}>;
+  onValuePresentationChange: (id: string | null) => void;
+}
 
-export const TableViewer = observer(function TableViewer({
+export const TableViewer: React.FC<Props> = observer(function TableViewer({
   tableId,
-  resultIndex,
+  resultIndex = 0,
   presentationId,
+  valuePresentationId,
   className,
   onPresentationChange,
-}: TableViewerProps) {
+  onValuePresentationChange,
+}) {
+  const styles = useStyles(viewerStyles, splitStyles);
   const dataPresentationService = useService(DataPresentationService);
   const tableViewerStorageService = useService(TableViewerStorageService);
   const dataModel = tableViewerStorageService.get(tableId);
-  const result = dataModel?.getResult(resultIndex || 0);
+  const result = dataModel?.getResult(resultIndex);
+  const loading = dataModel?.isLoading() ?? true;
+  const dataFormat = result?.dataFormat || ResultDataFormat.Resultset;
 
-  const handlePresentationChange = useCallback((id: string) => {
-    const presentation = dataPresentationService.get(id);
-    if (presentation && presentation.dataFormat !== dataModel?.source.dataFormat) {
-      dataModel?.setDataFormat(presentation.dataFormat)
-        .reload();
-      onPresentationChange(id);
+  const dataTableActions = useObjectRef<IDataTableActionsPrivate>({
+    presentationId,
+    valuePresentationId,
+    dataModel,
+    resultIndex,
+    dataFormat,
+    onPresentationChange,
+    onValuePresentationChange,
+
+    setPresentation(id: string) {
+      const presentation = dataPresentationService.get(id);
+
+      if (presentation) {
+        if (
+          presentation.dataFormat !== undefined
+          && presentation.dataFormat !== this.dataModel?.source.dataFormat
+        ) {
+          this.dataModel?.setDataFormat(presentation.dataFormat).reload();
+        }
+        this.onPresentationChange(id);
+      }
+    },
+
+    setValuePresentation(id: string | null) {
+      if (id === this.valuePresentationId || id === null) {
+        this.onValuePresentationChange(null);
+        return;
+      }
+
+      let presentation = dataPresentationService.get(id);
+
+      if (!presentation && this.dataModel) {
+        presentation = dataPresentationService.getSupported(
+          DataPresentationType.toolsPanel,
+          this.dataFormat,
+          undefined,
+          this.dataModel,
+          this.resultIndex
+        ) ?? undefined;
+      }
+
+      if (presentation) {
+        this.onValuePresentationChange(presentation.id);
+      }
+    },
+  }, {
+    presentationId,
+    valuePresentationId,
+    dataModel,
+    resultIndex,
+    dataFormat,
+    onPresentationChange,
+    onValuePresentationChange,
+  }, {
+    presentationId: observable,
+    valuePresentationId: observable,
+    dataFormat: observable,
+    resultIndex: observable,
+    dataModel: observable.ref,
+  }, ['setPresentation', 'setValuePresentation']);
+
+  useEffect(() => {
+    if (!presentationId || !dataModel) {
+      return;
     }
-  }, [onPresentationChange, dataModel]);
+
+    const presentation = dataPresentationService.get(presentationId);
+
+    if (presentation?.dataFormat && !dataModel.supportedDataFormats.includes(presentation.dataFormat)) {
+      onPresentationChange(dataFormat);
+    }
+  }, [dataFormat]);
 
   if (!dataModel) {
     return <Loader />;
   }
 
-  const dataFormat = result?.dataFormat || ResultDataFormat.Resultset;
   const presentation = dataPresentationService.getSupported(
+    DataPresentationType.main,
     dataFormat,
-    presentationId
+    presentationId,
+    dataModel,
+    resultIndex
   );
 
   if (!presentation) {
     return <TextPlaceholder>There are no available presentation for data format: {dataFormat}</TextPlaceholder>;
   }
 
-  return styled(viewerStyles)(
-    <table-viewer as="div" className={className}>
-      <TableHeader model={dataModel} />
-      <table-content as='div'>
-        <TableLeftBar
+  const valuePresentation = valuePresentationId
+    ? dataPresentationService.getSupported(
+      DataPresentationType.toolsPanel,
+      dataFormat,
+      valuePresentationId,
+      dataModel,
+      resultIndex
+    )
+    : null;
+
+  const resultExist = dataModel.source.hasResult(resultIndex);
+  const overlay = dataModel.source.results.length > 0 && presentation.dataFormat === dataFormat;
+  const valuePanelDisplayed = valuePresentation
+  && (valuePresentation.dataFormat === undefined
+    || valuePresentation?.dataFormat === dataFormat)
+  && overlay
+  && resultExist;
+
+  return styled(styles)(
+    <table-viewer className={className}>
+      <TableHeader model={dataModel} resultIndex={resultIndex} />
+      <table-content>
+        <TablePresentationBar
+          type={DataPresentationType.main}
           presentationId={presentation.id}
+          dataFormat={dataFormat}
           supportedDataFormat={dataModel.supportedDataFormats}
           model={dataModel}
-          onPresentationChange={handlePresentationChange}
+          resultIndex={resultIndex}
+          onPresentationChange={dataTableActions.setPresentation}
         />
-        <table-data as='div'>
-          <TableGrid model={dataModel} presentation={presentation} />
-          <TableFooter model={dataModel} />
+        <table-data>
+          <Split sticky={30} mode={valuePanelDisplayed ? undefined : 'minimize'} keepRatio>
+            <Pane>
+              <pane-content>
+                <TableGrid
+                  model={dataModel}
+                  actions={dataTableActions}
+                  dataFormat={dataFormat}
+                  presentation={presentation}
+                  resultIndex={resultIndex}
+                />
+              </pane-content>
+            </Pane>
+            {valuePanelDisplayed && <ResizerControls />}
+            <Pane main>
+              <pane-content>
+                {resultExist && (
+                  <TableToolsPanel
+                    model={dataModel}
+                    actions={dataTableActions}
+                    dataFormat={dataFormat}
+                    presentation={valuePresentation}
+                    resultIndex={resultIndex}
+                  />
+                )}
+              </pane-content>
+            </Pane>
+          </Split>
+          <TableError model={dataModel} loading={loading} />
+          <Loader
+            loading={loading}
+            cancelDisabled={!dataModel.source.canCancel}
+            overlay={overlay}
+            onCancel={() => dataModel.source.cancel()}
+          />
         </table-data>
+        <TablePresentationBar
+          type={DataPresentationType.toolsPanel}
+          presentationId={valuePresentationId ?? null}
+          dataFormat={dataFormat}
+          supportedDataFormat={[dataFormat]}
+          model={dataModel}
+          resultIndex={resultIndex}
+          onPresentationChange={dataTableActions.setValuePresentation}
+        />
       </table-content>
-      <Loader loading={dataModel.isLoading()} overlay />
+      <TableFooter model={dataModel} resultIndex={resultIndex} />
     </table-viewer>
   );
 });

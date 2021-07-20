@@ -1,28 +1,39 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { injectable } from '@cloudbeaver/core-di';
+import { Bootstrap, injectable } from '@cloudbeaver/core-di';
 
 import { NotificationService } from './NotificationService';
 
 @injectable()
-export class ExceptionsCatcherService {
+export class ExceptionsCatcherService extends Bootstrap {
   baseCatcher: OnErrorEventHandler | null = null;
 
-  constructor(private notificationService: NotificationService) { }
+  private ignored: string[] = [];
+  private messageTitle = 'Uncatched exception';
 
-  subscribe() {
+  constructor(private notificationService: NotificationService) {
+    super();
+  }
+
+  register(): void {
     this.baseCatcher = window.onerror;
     window.onerror = this.catcher;
   }
 
+  load(): void {}
+
   unsubscribe() {
     window.onerror = this.baseCatcher;
+  }
+
+  ignore(message: string) {
+    this.ignored.push(message);
   }
 
   private catcher = (
@@ -33,9 +44,14 @@ export class ExceptionsCatcherService {
     _error?: Error
   ) => {
     if (_error) {
-      this.notificationService.logException(_error, 'Uncatched exception');
+      this.notificationService.logException(_error, this.messageTitle);
     } else {
-      this.notificationService.logError({ title: event as string });
+      const message = String(event);
+      this.notificationService.logError({
+        title: this.messageTitle,
+        message,
+        isSilent: this.ignored.includes(message),
+      });
     }
 
     if (this.baseCatcher) {

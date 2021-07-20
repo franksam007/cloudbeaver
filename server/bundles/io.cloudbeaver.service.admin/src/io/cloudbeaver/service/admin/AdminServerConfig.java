@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import io.cloudbeaver.server.CBAppConfig;
 import io.cloudbeaver.server.CBApplication;
 import org.jkiss.dbeaver.model.data.json.JSONUtils;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -28,25 +30,35 @@ import java.util.Map;
 public class AdminServerConfig {
 
     private String serverName;
+    private String serverURL;
 
     private String adminName;
     private String adminPassword;
 
-    private boolean anonymousAccessEnabled;
-    private boolean authenticationEnabled;
-    private boolean customConnectionsEnabled;
+    private final boolean anonymousAccessEnabled;
+    private final boolean customConnectionsEnabled;
+    private final boolean publicCredentialsSaveEnabled;
+    private final boolean adminCredentialsSaveEnabled;
+    private final List<String> enabledAuthProviders;
 
     private long sessionExpireTime;
 
     public AdminServerConfig(Map<String, Object> params) {
         this.serverName = JSONUtils.getString(params, "serverName");
+        this.serverURL = JSONUtils.getString(params, "serverURL");
         this.adminName = JSONUtils.getString(params, "adminName");
         this.adminPassword = JSONUtils.getString(params, "adminPassword");
 
         CBAppConfig appConfig = CBApplication.getInstance().getAppConfiguration();
         this.anonymousAccessEnabled = JSONUtils.getBoolean(params, "anonymousAccessEnabled", appConfig.isAnonymousAccessEnabled());
-        this.authenticationEnabled = JSONUtils.getBoolean(params, "authenticationEnabled", appConfig.isAuthenticationEnabled());
         this.customConnectionsEnabled = JSONUtils.getBoolean(params, "customConnectionsEnabled", appConfig.isSupportsCustomConnections());
+        this.publicCredentialsSaveEnabled = JSONUtils.getBoolean(params, "publicCredentialsSaveEnabled", appConfig.isPublicCredentialsSaveEnabled());
+        this.adminCredentialsSaveEnabled = JSONUtils.getBoolean(params, "adminCredentialsSaveEnabled", appConfig.isAdminCredentialsSaveEnabled());
+        if (params.containsKey("enabledAuthProviders")) {
+            this.enabledAuthProviders = JSONUtils.getStringList(params, "enabledAuthProviders");
+        } else {
+            this.enabledAuthProviders = Arrays.asList(appConfig.getEnabledAuthProviders());
+        }
 
         this.sessionExpireTime = JSONUtils.getLong(params, "sessionExpireTime", -1);
     }
@@ -57,6 +69,14 @@ public class AdminServerConfig {
 
     public void setServerName(String serverName) {
         this.serverName = serverName;
+    }
+
+    public String getServerURL() {
+        return serverURL;
+    }
+
+    public void setServerURL(String serverURL) {
+        this.serverURL = serverURL;
     }
 
     public String getAdminName() {
@@ -79,24 +99,16 @@ public class AdminServerConfig {
         return anonymousAccessEnabled;
     }
 
-    public void setAnonymousAccessEnabled(boolean anonymousAccessEnabled) {
-        this.anonymousAccessEnabled = anonymousAccessEnabled;
-    }
-
-    public boolean isAuthenticationEnabled() {
-        return authenticationEnabled;
-    }
-
-    public void setAuthenticationEnabled(boolean authenticationEnabled) {
-        this.authenticationEnabled = authenticationEnabled;
-    }
-
     public boolean isCustomConnectionsEnabled() {
         return customConnectionsEnabled;
     }
 
-    public void setCustomConnectionsEnabled(boolean customConnectionsEnabled) {
-        this.customConnectionsEnabled = customConnectionsEnabled;
+    public boolean isPublicCredentialsSaveEnabled() {
+        return publicCredentialsSaveEnabled;
+    }
+
+    public boolean isAdminCredentialsSaveEnabled() {
+        return adminCredentialsSaveEnabled;
     }
 
     public long getSessionExpireTime() {
@@ -105,5 +117,9 @@ public class AdminServerConfig {
 
     public void setSessionExpireTime(long sessionExpireTime) {
         this.sessionExpireTime = sessionExpireTime;
+    }
+
+    public List<String> getEnabledAuthProviders() {
+        return enabledAuthProviders;
     }
 }

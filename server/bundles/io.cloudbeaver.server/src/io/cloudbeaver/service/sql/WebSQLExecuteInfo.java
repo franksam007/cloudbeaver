@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ public class WebSQLExecuteInfo {
 
     private String statusMessage;
     private long duration;
+    private String filterText;
     private WebSQLQueryResults[] results;
 
     @Property
@@ -46,6 +47,15 @@ public class WebSQLExecuteInfo {
 
     public void setDuration(long duration) {
         this.duration = duration;
+    }
+
+    @Property
+    public String getFilterText() {
+        return filterText;
+    }
+
+    public void setFilterText(String filterText) {
+        this.filterText = filterText;
     }
 
     @Property

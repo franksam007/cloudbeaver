@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ import io.cloudbeaver.WebAction;
 import io.cloudbeaver.model.session.WebAuthInfo;
 import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.model.user.WebAuthProviderInfo;
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 
 import java.util.Map;
 
@@ -31,14 +33,21 @@ import java.util.Map;
 public interface DBWServiceAuth extends DBWService {
 
     @WebAction(requirePermissions = {} )
-    WebAuthInfo authLogin(WebSession webSession, String providerId, Map<String, Object> credentials) throws DBWebException;
+    WebAuthInfo authLogin(
+        @NotNull WebSession webSession,
+        @NotNull String providerId,
+        @NotNull Map<String, Object> credentials,
+        boolean linkWithActiveUser) throws DBWebException;
 
     @WebAction(requirePermissions = {} )
-    void authLogout(WebSession webSession) throws DBWebException;
+    void authLogout(@NotNull WebSession webSession, @Nullable String providerId) throws DBWebException;
 
     @WebAction(requirePermissions = {})
-    WebAuthInfo sessionUser(WebSession webSession) throws DBWebException;
+    WebUserInfo activeUser(@NotNull WebSession webSession) throws DBWebException;
 
     @WebAction(requirePermissions = {})
-    WebAuthProviderInfo[] getAuthProviders(WebSession webSession);
+    WebAuthProviderInfo[] getAuthProviders();
+
+    @WebAction()
+    boolean changeLocalPassword(@NotNull WebSession webSession, @NotNull String oldPassword, @NotNull String newPassword) throws DBWebException;
 }

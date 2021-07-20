@@ -1,24 +1,28 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { computed } from 'mobx';
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import { useMemo } from 'react';
 import styled, { css } from 'reshadow';
 
-import { Loader } from '@cloudbeaver/core-blocks';
+import { Loader, useMapResource } from '@cloudbeaver/core-blocks';
 import { useService } from '@cloudbeaver/core-di';
+import type { MetadataMap } from '@cloudbeaver/core-utils';
 
-import { CoreSettingsService } from '../CoreSettingsService';
-import { NavNode } from '../shared/NodesManager/EntityTypes';
+import type { NavNode } from '../shared/NodesManager/EntityTypes';
+import { NavNodeInfoResource, ROOT_NODE_PATH } from '../shared/NodesManager/NavNodeInfoResource';
+import { NavTreeResource } from '../shared/NodesManager/NavTreeResource';
 import { useChildren } from '../shared/useChildren';
+import { elementsTreeNameFilter } from './elementsTreeNameFilter';
+import { NavigationNodeNested } from './NavigationTreeNode/NavigationNode/NavigationNodeNested';
 import { NavigationNodeElement } from './NavigationTreeNode/NavigationNodeElement';
 import { ITreeContext, TreeContext } from './TreeContext';
+import { IElementsTreeCustomRenderer, IElementsTreeFilter, ITreeNodeState, useElementsTree } from './useElementsTree';
 
 const styles = css`
   tree {
@@ -36,39 +40,73 @@ const styles = css`
 
 interface Props {
   root?: string;
+  selectionTree?: boolean;
+  localState?: MetadataMap<string, ITreeNodeState>;
   control?: React.FC<{
     node: NavNode;
   }>;
   emptyPlaceholder: React.FC;
   className?: string;
+  filters?: IElementsTreeFilter[];
+  renderers?: IElementsTreeCustomRenderer[];
+  customSelect?: (node: NavNode, multiple: boolean) => void;
+  isGroup?: (node: NavNode) => boolean;
+  onExpand?: (node: NavNode, state: boolean) => Promise<void> | void;
   onOpen?: (node: NavNode) => Promise<void> | void;
-  onSelect?: (node: NavNode, multiple: boolean) => boolean;
-  isSelected?: (node: NavNode) => boolean;
+  onSelect?: (node: NavNode, state: boolean) => void;
+  onFilter?: (node: NavNode, value: string) => void;
 }
 
 export const ElementsTree: React.FC<Props> = observer(function ElementsTree({
-  root,
+  root = ROOT_NODE_PATH,
   control,
+  localState,
+  selectionTree = false,
   emptyPlaceholder,
+  filters,
+  renderers,
   className,
+  isGroup,
+  customSelect,
+  onExpand,
   onOpen,
   onSelect,
-  isSelected,
+  onFilter,
 }) {
-  const config = useService(CoreSettingsService);
   const nodeChildren = useChildren(root);
   const Placeholder = emptyPlaceholder;
-  const limit = useMemo(() => computed(() => config.settings.getValue('app.navigationTree.childrenLimit')), [config]);
+  const navNodeInfoResource = useService(NavNodeInfoResource);
+
+  useMapResource(NavTreeResource, root);
+
+  const nameFilter = useMemo(() => elementsTreeNameFilter(navNodeInfoResource), [navNodeInfoResource]);
+
+  const tree = useElementsTree({
+    root,
+    localState,
+    filters: [nameFilter, ...(filters || [])],
+    renderers,
+    isGroup,
+    onFilter,
+    customSelect,
+    onExpand,
+    onSelect,
+  });
 
   const context = useMemo<ITreeContext>(
-    () => ({ control, onOpen, onSelect, isSelected }),
-    [control, onOpen, onSelect, isSelected]
+    () => ({
+      tree,
+      selectionTree,
+      control,
+      onOpen,
+    }),
+    [control, selectionTree, onOpen]
   );
 
   if (!nodeChildren.children || nodeChildren.children.length === 0) {
     if (nodeChildren.isLoading()) {
       return styled(styles)(
-        <center as="div">
+        <center>
           <Loader />
         </center>
       );
@@ -79,10 +117,8 @@ export const ElementsTree: React.FC<Props> = observer(function ElementsTree({
 
   return styled(styles)(
     <TreeContext.Provider value={context}>
-      <tree as="div" className={className}>
-        {nodeChildren.children.slice(0, limit.get()).map(id => (
-          <NavigationNodeElement key={id} nodeId={id} />
-        ))}
+      <tree className={className}>
+        <NavigationNodeNested nodeId={root} component={NavigationNodeElement} root />
         <Loader loading={nodeChildren.isLoading()} overlay />
       </tree>
     </TreeContext.Provider>

@@ -1,21 +1,26 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import styled, { css } from 'reshadow';
+import styled, { css, use } from 'reshadow';
 
-import { Icon, Button } from '@cloudbeaver/core-blocks';
+import { Icon, Button, IconOrImage } from '@cloudbeaver/core-blocks';
 import { Translate } from '@cloudbeaver/core-localization';
 import { useStyles } from '@cloudbeaver/core-theming';
 
-import { commonDialogStyle } from './CommonDialog/styles';
-import { DialogComponent } from './CommonDialogService';
+import { commonDialogThemeStyle, commonDialogBaseStyle } from './CommonDialog/styles';
+import type { DialogComponent } from './CommonDialogService';
 
 const style = css`
+  dialog {
+    width: 400px;
+    min-width: auto;
+  }
+
   footer {
     align-items: center;
     justify-content: flex-end;
@@ -27,7 +32,11 @@ const style = css`
 `;
 
 export interface ConfirmationDialogPayload {
+  icon?: string;
   title: string;
+  subTitle?: string;
+  bigIcon?: boolean;
+  viewBox?: string;
   message: string;
   confirmActionText?: string;
 }
@@ -38,17 +47,30 @@ export const ConfirmationDialog: DialogComponent<ConfirmationDialogPayload> = fu
   rejectDialog,
   className,
 }) {
-  return styled(useStyles(commonDialogStyle, style))(
+  const { icon, title, subTitle, bigIcon, viewBox, message, confirmActionText } = payload;
+
+  return styled(useStyles(commonDialogThemeStyle, commonDialogBaseStyle, style))(
     <dialog className={className}>
       <header>
-        <header-title as="div">
-          <h1><Translate token={payload.title} /></h1>
-          <reject as="div">
-            <Icon name="cross" viewBox="0 0 16 16" onClick={rejectDialog} />
-          </reject>
+        <icon-container>
+          {icon && <IconOrImage {...use({ bigIcon })} icon={icon} viewBox={viewBox} />}
+        </icon-container>
+        <header-title>
+          <h3><Translate token={title} /></h3>
+          {rejectDialog && (
+            <reject>
+              <Icon name="cross" viewBox="0 0 16 16" onClick={rejectDialog} />
+            </reject>
+          )}
         </header-title>
+        {subTitle && <sub-title>{subTitle}</sub-title>}
       </header>
-      <dialog-body as="div"><Translate token={payload.message} /></dialog-body>
+      <dialog-body>
+        <dialog-body-content>
+          <Translate token={message} />
+        </dialog-body-content>
+        <dialog-body-overflow />
+      </dialog-body>
       <footer>
         <Button
           type="button"
@@ -63,7 +85,7 @@ export const ConfirmationDialog: DialogComponent<ConfirmationDialogPayload> = fu
           mod={['unelevated']}
           onClick={() => resolveDialog()}
         >
-          <Translate token={payload.confirmActionText || 'ui_processing_ok'} />
+          <Translate token={confirmActionText || 'ui_processing_ok'} />
         </Button>
       </footer>
     </dialog>

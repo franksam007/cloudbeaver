@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -9,12 +9,14 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="types.d.ts" />
 
-import { GraphQLResponse, GraphQLRequestContext, ClientError } from 'graphql-request/dist/src/types';
+import type { GraphQLResponse, GraphQLRequestContext, ClientError } from 'graphql-request/dist/src/types';
 
-export class GQLError extends Error {
+import { DetailsError } from './DetailsError';
+
+export class GQLError extends DetailsError {
   response: GraphQLResponse;
   request: GraphQLRequestContext;
-  errorText: string;
+  errorMessage: string;
   errorCode?: string;
   isTextBody = false; // true when server returns not GQLError object but plain text or html error
 
@@ -25,9 +27,9 @@ export class GQLError extends Error {
     this.request = clientError.request;
     if (typeof clientError.response.error === 'string') {
       this.isTextBody = true;
-      this.errorText = clientError.response.error;
+      this.errorMessage = clientError.response.error;
     } else {
-      this.errorText = clientError.response.errors?.map(e => e.message).join('\n') || 'unknown error';
+      this.errorMessage = clientError.response.errors?.map(e => e.message).join('\n') || 'unknown error';
 
       const firstError = clientError.response.errors?.[0];
       this.errorCode = firstError?.extensions?.webErrorCode;

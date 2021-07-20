@@ -1,27 +1,26 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 
-import { PlaceholderContainer } from './PlaceholderContainer';
+import type { PlaceholderContainer } from './PlaceholderContainer';
 
-type Props<T = unknown> = T extends unknown ? {
+type Props<T extends Record<string, any>> = T & {
   container: PlaceholderContainer<T>;
-  context?: T;
-} : {
-  container: PlaceholderContainer<T>;
-  context: T;
 };
 
-export const Placeholder = observer(function Placeholder<T = unknown>({ container, context }: Props<T>) {
+export const Placeholder = observer(function Placeholder<T extends Record<string, any>>({
+  container,
+  ...rest
+}: Props<T>) {
   return (
     <>
-      {container.get().map(({ id, component: Component }) => <Component key={id} context={context!} />)}
+      {container.get().map(({ id, component: Component }) => <Component key={id} {...(rest as any as T)} />)}
     </>
   );
 });

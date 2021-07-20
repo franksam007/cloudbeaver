@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -40,11 +40,12 @@ export class ConnectionsManagerService {
 
   async requireConnection(connectionId: string | null = null): Promise<Connection | null> {
     const context = await this.connectionExecutor.execute(connectionId);
+    const connection = context.getContext(this.connectionContext);
 
-    return (await context.getContext(this.connectionContext)).connection;
+    return connection.connection;
   }
 
-  async addOpenedConnection(connection: Connection) {
+  async addOpenedConnection(connection: Connection): Promise<void> {
     this.addConnection(connection);
   }
 
@@ -62,7 +63,7 @@ export class ConnectionsManagerService {
     );
   }
 
-  async deleteConnection(id: string) {
+  async deleteConnection(id: string): Promise<void> {
     const connection = await this.connectionInfo.load(id);
 
     if (!connection.features.includes(EConnectionFeature.manageable)) {
@@ -84,9 +85,9 @@ export class ConnectionsManagerService {
 
   hasAnyConnection(connected?: boolean): boolean {
     if (connected) {
-      return Array.from(this.connectionInfo.data.values()).some(connection => connection.connected);
+      return this.connectionInfo.values.some(connection => connection.connected);
     }
-    return !!Array.from(this.connectionInfo.data.values()).length;
+    return !!this.connectionInfo.values.length;
   }
 
   private connectionContext() {
@@ -96,22 +97,19 @@ export class ConnectionsManagerService {
   }
 
   private async connectionDialog(connectionId: string | null, context: IExecutionContextProvider<string | null>) {
-    const connection = await context.getContext(this.connectionContext);
+    const connection = context.getContext(this.connectionContext);
+
     if (!connectionId) {
       if (!this.hasAnyConnection()) {
         return;
       }
-      connectionId = Array.from(this.connectionInfo.data.values())[0].id;
+      connectionId = this.connectionInfo.values[0].id;
     }
 
     try {
-      if (!this.connectionInfo.has(connectionId)) {
-        return;
-      }
-
       const tempConnection = await this.connectionAuthService.auth(connectionId);
 
-      if (!tempConnection.connected) {
+      if (!tempConnection?.connected) {
         return;
       }
       connection.connection = tempConnection;
@@ -137,7 +135,7 @@ export class ConnectionsManagerService {
     const { controller, notification } = this.notificationService.processNotification(() => ProcessSnackbar, {}, { title: 'Disconnecting...' });
 
     try {
-      for (const connection of this.connectionInfo.data.values()) {
+      for (const connection of this.connectionInfo.values) {
         await this._closeConnectionAsync(connection);
       }
       notification.close();
@@ -169,7 +167,6 @@ export class ConnectionsManagerService {
   }
 
   private async afterConnectionClose(id: string) {
-    // this.navNodeManagerService.removeTree(id);
     this.onCloseConnection.next(id);
   }
 

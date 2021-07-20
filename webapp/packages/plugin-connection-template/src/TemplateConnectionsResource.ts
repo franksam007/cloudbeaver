@@ -1,32 +1,27 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
-
-import { AppAuthService } from '@cloudbeaver/core-authentication';
 import { Connection, ConnectionsResource } from '@cloudbeaver/core-connections';
 import { injectable } from '@cloudbeaver/core-di';
-import { EPermission, PermissionsService } from '@cloudbeaver/core-root';
+import { EPermission, PermissionsService, SessionDataResource } from '@cloudbeaver/core-root';
 import { GraphQLService, CachedDataResource } from '@cloudbeaver/core-sdk';
 
 @injectable()
 export class TemplateConnectionsResource extends CachedDataResource<Connection[], void> {
-  @observable loaded: boolean;
   constructor(
     private graphQLService: GraphQLService,
     private permissionsService: PermissionsService,
     connectionsResource: ConnectionsResource,
-    appAuthService: AppAuthService,
+    sessionDataResource: SessionDataResource,
   ) {
     super([]);
-    this.loaded = false;
     connectionsResource.onDataUpdate.addHandler(() => this.markOutdated());
-    appAuthService.auth.addHandler(() => this.markOutdated());
+    sessionDataResource.onDataOutdated.addHandler(() => this.markOutdated());
   }
 
   isLoaded(): boolean {
@@ -34,12 +29,15 @@ export class TemplateConnectionsResource extends CachedDataResource<Connection[]
   }
 
   protected async loader(): Promise<Connection[]> {
-    if (!await this.permissionsService.hasAsync(EPermission.public)) {
-      this.loaded = true;
+    if (!(await this.permissionsService.hasAsync(EPermission.public))) {
       return [];
     }
-    const { connections } = await this.graphQLService.sdk.getTemplateConnections();
-    this.loaded = true;
+    const { connections } = await this.graphQLService.sdk.getTemplateConnections({
+      customIncludeNetworkHandlerCredentials: false,
+      customIncludeOriginDetails: false,
+      includeAuthProperties: true,
+      includeOrigin: false,
+    });
     return connections;
   }
 }

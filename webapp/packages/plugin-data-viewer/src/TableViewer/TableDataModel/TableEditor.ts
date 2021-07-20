@@ -1,17 +1,17 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 import { Subject, Observable } from 'rxjs';
 
 import { EditedRow, RowDiff } from './EditedRow';
-import { TableDataModel } from './TableDataModel';
-import { TableRow, SomeTableRows } from './TableRow';
+import type { TableDataModel } from './TableDataModel';
+import type { TableRow, SomeTableRows } from './TableRow';
 
 /**
  *  when user edit data in e table this class store changes until they will be applied
@@ -20,11 +20,15 @@ export class TableEditor {
   readonly onRowsUpdate: Observable<number[]>;
   readonly onCancelChanges: Observable<null>;
 
-  @observable private editedRows = new Map<number, EditedRow>();
+  private editedRows = new Map<number, EditedRow>();
   private rowsUpdateSubject: Subject<number[]>;
   private cancelChangesSubject: Subject<null>;
 
   constructor(private dataModel: TableDataModel) {
+    makeObservable<TableEditor, 'editedRows'>(this, {
+      editedRows: observable,
+    });
+
     this.rowsUpdateSubject = new Subject();
     this.cancelChangesSubject = new Subject();
     this.onRowsUpdate = this.rowsUpdateSubject.asObservable();

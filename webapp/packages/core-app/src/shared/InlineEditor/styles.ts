@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -38,8 +38,8 @@ export const InlineEditorStyles = composes(
     border: solid 1px;
   }
 
-  editor:focus-within {
-    border-color: #01cca3;
+  editor:focus-within, editor[|active] {
+    border-color: #52c41a !important;
   }
 
   editor-container {
@@ -53,8 +53,8 @@ export const InlineEditorStyles = composes(
       letter-spacing: inherit;
       outline: none;
       border: none;
-      padding-left: 11px; /* because of left border */
-      padding-right: 12px;
+      padding-left: 8px;
+      padding-right: 8px;
       padding-top: 1px; /* because of -1px top */
       line-height: 24px;
       width: 100%;
@@ -73,11 +73,11 @@ export const InlineEditorStyles = composes(
     border: solid 1px;
   }
 
-  editor:focus-within {
+  editor:focus-within, editor[|active] {
     & editor-actions {
-      border-top-color:  #01cca3;
-      border-right-color: #01cca3;
-      border-bottom-color: #01cca3;
+      border-top-color:  #52c41a !important;
+      border-right-color: #52c41a !important;
+      border-bottom-color: #52c41a !important;
     }
   }
 
@@ -95,10 +95,10 @@ export const InlineEditorStyles = composes(
     left: auto;
   }
 
-  editor:focus-within {
+  editor:focus-within, editor[|active] {
     & editor-actions[|position=bottom],
     & editor-actions[|position=top] {
-      border-left-color: #01cca3;
+      border-left-color: #52c41a !important;
     }
   }
 
@@ -115,7 +115,7 @@ export const InlineEditorStyles = composes(
     box-sizing: border-box;
     display: flex;
     width: 24px;
-    padding: 5px;
+    padding: 4px;
     cursor: pointer;
 
     & Icon {

@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import org.jkiss.code.NotNull;
 import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
+import org.jkiss.dbeaver.model.DBConstants;
 import org.jkiss.dbeaver.model.DBPDataSourceContainer;
 import org.jkiss.dbeaver.model.access.DBASession;
 import org.jkiss.dbeaver.model.app.DBPDataSourceRegistry;
@@ -56,10 +57,13 @@ import org.jkiss.dbeaver.registry.ProjectMetadata;
 import org.jkiss.dbeaver.runtime.jobs.DisconnectJob;
 import org.jkiss.utils.CommonUtils;
 
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -74,6 +78,7 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
     private static final Log log = Log.getLog(WebSession.class);
 
     private static final String ATTR_LOCALE = "locale";
+    private static final String SESSION_TEMP_COOKIE = "cb-session";
 
     private static final AtomicInteger TASK_ID = new AtomicInteger();
 
@@ -92,15 +97,16 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
     private boolean cacheExpired;
 
     private final Map<String, WebConnectionInfo> connections = new HashMap<>();
-    private final List<WebServerMessage> progressMessages = new ArrayList<>();
+    private final List<WebServerMessage> sessionMessages = new ArrayList<>();
 
     private final Map<String, WebAsyncTaskInfo> asyncTasks = new HashMap<>();
     private final Map<String, Object> attributes = new HashMap<>();
     private final Map<String, Function<Object,Object>> attributeDisposers = new HashMap<>();
-    private WebAuthInfo authInfo;
+    // Map of auth tokens. Key is authentication provdier
+    private final List<WebAuthInfo> authTokens = new ArrayList<>();
 
     private DBNModel navigatorModel;
-    private DBRProgressMonitor progressMonitor = new SessionProgressMonitor();
+    private final DBRProgressMonitor progressMonitor = new SessionProgressMonitor();
     private ProjectMetadata sessionProject;
     private final SessionContextImpl sessionAuthContext;
 
@@ -201,9 +207,11 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
     public void forceUserRefresh(WebUser user) {
         if (!CommonUtils.equalObjects(this.user, user)) {
             // User has changed. We need to reset all session attributes
+            clearAuthTokens();
             try {
                 resetSessionCache();
             } catch (DBCException e) {
+                addSessionError(e);
                 log.error(e);
             }
         }
@@ -272,6 +280,7 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
         try {
             this.refreshConnections();
         } catch (Exception e) {
+            addSessionError(e);
             log.error("Error getting connection list", e);
         }
     }
@@ -318,6 +327,7 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
                 .getSubjectConnectionAccess(new String[]{subjectId}))
                 .map(DBWConnectionGrant::getConnectionId).collect(Collectors.toSet());
         } catch (DBCException e) {
+            addSessionError(e);
             log.error("Error reading connection grants", e);
             return Collections.emptySet();
         }
@@ -372,6 +382,7 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
             accessibleConnectionIds = readAccessibleConnectionIds();
 
         } catch (Exception e) {
+            addSessionError(e);
             log.error("Error reading session permissions", e);
         }
     }
@@ -393,15 +404,15 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
      * Returns and clears progress messages
      */
     @Association
-    public List<WebServerMessage> getProgressMessages() {
-        synchronized (progressMessages) {
-            List<WebServerMessage> copy = new ArrayList<>(progressMessages);
-            progressMessages.clear();
+    public List<WebServerMessage> getSessionMessages() {
+        synchronized (sessionMessages) {
+            List<WebServerMessage> copy = new ArrayList<>(sessionMessages);
+            sessionMessages.clear();
             return copy;
         }
     }
 
-    synchronized void updateInfo(HttpServletRequest request) {
+    synchronized void updateInfo(HttpServletRequest request, HttpServletResponse response) {
         HttpSession httpSession = request.getSession();
         this.lastAccessTime = System.currentTimeMillis();
         this.lastRemoteAddr = request.getRemoteAddr();
@@ -415,12 +426,26 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
                     DBWSecurityController.getInstance().createSession(this);
                     this.persisted = true;
                 } else {
-                    // Update record
-                    DBWSecurityController.getInstance().updateSession(this);
+                    if (!CBApplication.getInstance().isConfigurationMode()) {
+                        // Update record
+                        DBWSecurityController.getInstance().updateSession(this);
+                    }
                 }
             } catch (Exception e) {
+                addSessionError(e);
                 log.error("Error persisting web session", e);
             }
+        }
+        {
+            long maxSessionIdleTime = CBApplication.getInstance().getMaxSessionIdleTime();
+
+            SimpleDateFormat sdf = new SimpleDateFormat(DBConstants.DEFAULT_ISO_TIMESTAMP_FORMAT);
+            sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
+            Cookie sessionCookie = new Cookie(SESSION_TEMP_COOKIE, sdf.format(new Date(System.currentTimeMillis() + maxSessionIdleTime)));
+            sessionCookie.setMaxAge((int) (maxSessionIdleTime / 1000));
+            sessionCookie.setPath(CBApplication.getInstance().getRootURI());
+            //sessionCookie.setComment("CB session cookie");
+            response.addCookie(sessionCookie);
         }
     }
 
@@ -477,15 +502,22 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
         } catch (Throwable e) {
             log.error(e);
         }
-        if (this.authInfo != null) {
-            this.authInfo.closeAuth();
-            this.authInfo = null;
-        }
+        clearAuthTokens();
         this.user = null;
 
         if (this.sessionProject != null) {
             this.sessionProject.dispose();
             this.sessionProject = null;
+        }
+    }
+
+    private void clearAuthTokens() {
+        ArrayList<WebAuthInfo> tokensCopy;
+        synchronized (authTokens) {
+            tokensCopy = new ArrayList<>(this.authTokens);
+        }
+        for (WebAuthInfo ai : tokensCopy) {
+            removeAuthInfo(ai);
         }
     }
 
@@ -536,7 +568,7 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
         return true;
     }
 
-    public WebAsyncTaskInfo createAndRunAsyncTask(String taskName, WebAsyncTaskProcessor runnable) {
+    public WebAsyncTaskInfo createAndRunAsyncTask(String taskName, WebAsyncTaskProcessor<?> runnable) {
         int taskId = TASK_ID.incrementAndGet();
         WebAsyncTaskInfo asyncTask = getAsyncTask(String.valueOf(taskId), taskName, true);
 
@@ -551,6 +583,7 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
                     asyncTask.setStatus("Finished");
                     asyncTask.setRunning(false);
                 } catch (InvocationTargetException e) {
+                    addSessionError(e.getTargetException());
                     asyncTask.setJobError(e.getTargetException());
                 } catch (InterruptedException e) {
                     asyncTask.setJobError(e);
@@ -565,19 +598,25 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
         return asyncTask;
     }
 
+    public void addSessionError(Throwable exception) {
+        synchronized (sessionMessages) {
+            sessionMessages.add(new WebServerMessage(exception));
+        }
+    }
+
     public List<WebServerMessage> readLog(Integer maxEntries, Boolean clearLog) {
-        synchronized (progressMessages) {
+        synchronized (sessionMessages) {
             List<WebServerMessage> messages = new ArrayList<>();
             int entryCount = CommonUtils.toInt(maxEntries);
-            if (entryCount == 0 || entryCount >= progressMessages.size()) {
-                messages.addAll(progressMessages);
+            if (entryCount == 0 || entryCount >= sessionMessages.size()) {
+                messages.addAll(sessionMessages);
                 if (CommonUtils.toBoolean(clearLog)) {
-                    progressMessages.clear();
+                    sessionMessages.clear();
                 }
             } else {
-                messages.addAll(progressMessages.subList(0, maxEntries));
+                messages.addAll(sessionMessages.subList(0, maxEntries));
                 if (CommonUtils.toBoolean(clearLog)) {
-                    progressMessages.removeAll(messages);
+                    sessionMessages.removeAll(messages);
                 }
             }
             return messages;
@@ -622,30 +661,69 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
         }
     }
 
-    public WebAuthInfo getAuthInfo() {
-        return authInfo;
+    public WebAuthInfo getAuthInfo(@Nullable String providerID) {
+        synchronized (authTokens) {
+
+            if (providerID != null) {
+                for (WebAuthInfo ai : authTokens) {
+                    if (ai.getAuthProvider().equals(providerID)) {
+                        return ai;
+                    }
+                }
+                return null;
+            }
+            return authTokens.isEmpty() ? null : authTokens.get(0);
+        }
     }
 
-    public void setAuthInfo(@Nullable WebAuthInfo authInfo) {
-        WebUser newUser = authInfo == null ? null : authInfo.getUser();
-        if (CommonUtils.equalObjects(this.user, newUser)) {
-            return;
+    public List<WebAuthInfo> getAllAuthInfo() {
+        synchronized (authTokens) {
+            return new ArrayList<>(authTokens);
         }
-        forceUserRefresh(newUser);
+    }
 
-        if (this.authInfo != null) {
-            DBASession oldAuthSession = this.authInfo.getAuthSession();
-            if (oldAuthSession != null) {
-                sessionProject.getSessionContext().removeSession(oldAuthSession);
-            }
-            this.authInfo.closeAuth();
+    public void addAuthInfo(@NotNull WebAuthInfo authInfo) throws DBException {
+        WebUser newUser = authInfo.getUser();
+        if (this.user == null && newUser != null) {
+            forceUserRefresh(newUser);
+        } else if (!CommonUtils.equalObjects(this.user, newUser)) {
+            throw new DBException("Can't authorize different users in the single session");
         }
-        this.authInfo = authInfo;
-        if (authInfo != null) {
-            DBASession authSession = authInfo.getAuthSession();
-            if (authSession != null) {
-                this.sessionProject.getSessionContext().addSession(authSession);
-            }
+
+
+        WebAuthInfo oldAuthInfo = getAuthInfo(authInfo.getAuthProviderDescriptor().getId());
+        if (oldAuthInfo != null) {
+            removeAuthInfo(oldAuthInfo);
+        }
+
+        synchronized (authTokens) {
+            authTokens.add(authInfo);
+        }
+        DBASession authSession = authInfo.getAuthSession();
+        if (authSession != null) {
+            this.sessionProject.getSessionContext().addSession(authSession);
+        }
+    }
+
+    private void removeAuthInfo(WebAuthInfo oldAuthInfo) {
+        DBASession oldAuthSession = oldAuthInfo.getAuthSession();
+        if (oldAuthSession != null && sessionProject != null) {
+            sessionProject.getSessionContext().removeSession(oldAuthSession);
+        }
+        oldAuthInfo.closeAuth();
+        synchronized (authTokens) {
+            authTokens.remove(oldAuthInfo);
+        }
+    }
+
+    public void removeAuthInfo(String providerId) {
+        if (providerId == null) {
+            clearAuthTokens();
+        } else {
+            removeAuthInfo(getAuthInfo(providerId));
+        }
+        if (authTokens.isEmpty()) {
+            forceUserRefresh(null);
         }
     }
 
@@ -656,25 +734,19 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
     // Auth credentials provider
     // Adds auth properties passed from web (by user)
     @Override
-    public boolean provideAuthParameters(DBPDataSourceContainer dataSourceContainer, DBPConnectionConfiguration configuration) {
+    public boolean provideAuthParameters(@NotNull DBRProgressMonitor monitor, @NotNull DBPDataSourceContainer dataSourceContainer, @NotNull DBPConnectionConfiguration configuration) {
         try {
             // Properties from nested auth sessions
             // FIXME: we need to support multiple credential providers (e.g. multiple clouds).
             DBAAuthCredentialsProvider nestedProvider = getAdapter(DBAAuthCredentialsProvider.class);
             if (nestedProvider != null) {
-                if (!nestedProvider.provideAuthParameters(dataSourceContainer, configuration)) {
+                if (!nestedProvider.provideAuthParameters(monitor, dataSourceContainer, configuration)) {
                     return false;
                 }
             }
-
-            // Properties passed from web
             WebConnectionInfo webConnectionInfo = findWebConnectionInfo(dataSourceContainer.getId());
             if (webConnectionInfo != null) {
-                // webConnectionInfo may be null in some cases (e.g. connection test when no actual connection exist yet)
-                Map<String, Object> authProperties = webConnectionInfo.getSavedAuthProperties();
-                if (authProperties != null) {
-                    authProperties.forEach((s, o) -> configuration.setAuthProperty(s, CommonUtils.toString(o)));
-                }
+                WebServiceUtils.saveCredentialsInDataSource(webConnectionInfo, dataSourceContainer, configuration);
             }
 
             // Save auth credentials in connection config (e.g. sets user name and password in DBPConnectionConfiguration)
@@ -703,6 +775,7 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
 //            credGson.fromJson(credGson.toJsonTree(authProperties), credentials.getClass());
 //            configuration.getAuthModel().saveCredentials(dataSourceContainer, configuration, credentials);
         } catch (DBException e) {
+            addSessionError(e);
             log.error(e);
         }
         return true;
@@ -711,9 +784,13 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
     // May be called to extract auth information from session
     @Override
     public <T> T getAdapter(Class<T> adapter) {
-        if (authInfo != null && authInfo.getAuthSession() != null) {
-            if (adapter.isInstance(authInfo.getAuthSession())) {
-                return adapter.cast(authInfo.getAuthSession());
+        synchronized (authTokens) {
+            for (WebAuthInfo authInfo : authTokens) {
+                if (authInfo != null && authInfo.getAuthSession() != null) {
+                    if (adapter.isInstance(authInfo.getAuthSession())) {
+                        return adapter.cast(authInfo.getAuthSession());
+                    }
+                }
             }
         }
         return null;
@@ -725,15 +802,15 @@ public class WebSession implements DBASession, DBAAuthCredentialsProvider, IAdap
     private class SessionProgressMonitor extends BaseProgressMonitor {
         @Override
         public void beginTask(String name, int totalWork) {
-            synchronized (progressMessages) {
-                progressMessages.add(new WebServerMessage(WebServerMessage.MessageType.INFO, name));
+            synchronized (sessionMessages) {
+                sessionMessages.add(new WebServerMessage(WebServerMessage.MessageType.INFO, name));
             }
         }
 
         @Override
         public void subTask(String name) {
-            synchronized (progressMessages) {
-                progressMessages.add(new WebServerMessage(WebServerMessage.MessageType.INFO, name));
+            synchronized (sessionMessages) {
+                sessionMessages.add(new WebServerMessage(WebServerMessage.MessageType.INFO, name));
             }
         }
     }

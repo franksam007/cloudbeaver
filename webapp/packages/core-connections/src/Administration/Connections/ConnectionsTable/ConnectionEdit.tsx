@@ -1,22 +1,21 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
-import { useContext, useCallback, useRef, useEffect } from 'react';
+import { observer } from 'mobx-react-lite';
+import { useRef, useEffect } from 'react';
 import styled, { css } from 'reshadow';
 
-import { Loader, TableContext } from '@cloudbeaver/core-blocks';
-import { useController } from '@cloudbeaver/core-di';
+import { useService } from '@cloudbeaver/core-di';
 import { useStyles, composes } from '@cloudbeaver/core-theming';
 
-import { ConnectionForm } from '../ConnectionForm/ConnectionForm';
-import { IConnectionFormModel } from '../ConnectionForm/IConnectionFormModel';
-import { ConnectionEditController } from './ConnectionEditController';
+import { ConnectionForm } from '../../../ConnectionForm/ConnectionForm';
+import { useConnectionFormState } from '../../../ConnectionForm/useConnectionFormState';
+import { ConnectionsResource } from '../../ConnectionsResource';
 
 const styles = composes(
   css`
@@ -27,11 +26,10 @@ const styles = composes(
   css`
     box {
       box-sizing: border-box;
-      padding: 24px;
-      min-height: 440px;
-      max-height: 500px;
+      padding-bottom: 24px;
       display: flex;
       flex-direction: column;
+      height: 664px;
     }
   `
 );
@@ -40,13 +38,13 @@ interface Props {
   item: string;
 }
 
-export const ConnectionEdit = observer(function ConnectionEdit({
+export const ConnectionEdit = observer(function ConnectionEditNew({
   item,
 }: Props) {
+  const connectionsResource = useService(ConnectionsResource);
   const boxRef = useRef<HTMLDivElement>(null);
-  const tableContext = useContext(TableContext);
-  const collapse = useCallback(() => tableContext?.setItemExpand(item, false), [tableContext, item]);
-  const controller = useController(ConnectionEditController, item);
+  // const tableContext = useContext(TableContext);
+  // const collapse = useCallback(() => tableContext?.setItemExpand(item, false), [tableContext, item]);
 
   useEffect(() => {
     boxRef.current?.scrollIntoView({
@@ -55,15 +53,20 @@ export const ConnectionEdit = observer(function ConnectionEdit({
     });
   }, []);
 
+  const data = useConnectionFormState(
+    connectionsResource,
+    state => state.setOptions('edit', 'admin')
+  );
+
+  data.config.connectionId = item;
+
   return styled(useStyles(styles))(
     <box ref={boxRef} as='div'>
-      {controller.connection ? (
-        <ConnectionForm
-          model={controller as IConnectionFormModel}
-          onBack={collapse}
-          onCancel={collapse}
-        />
-      ) : <Loader />}
+      <ConnectionForm
+        state={data}
+        // onCancel={collapse}
+        // onSave={collapse}
+      />
     </box>
   );
 });

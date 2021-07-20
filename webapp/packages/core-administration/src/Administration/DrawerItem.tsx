@@ -1,32 +1,37 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 
 import { useService } from '@cloudbeaver/core-di';
 
-import { AdministrationItemDrawerProps } from '../AdministrationItem/IAdministrationItem';
+import { filterOnlyActive } from '../AdministrationItem/AdministrationItemService';
+import type { AdministrationItemDrawerProps } from '../AdministrationItem/IAdministrationItem';
 import { ConfigurationWizardService } from '../AdministrationScreen/ConfigurationWizard/ConfigurationWizardService';
 
 export const DrawerItem = observer(function DrawerItem({
-  item, onSelect, style, configurationWizard,
+  item, onSelect, style, configurationWizard, disabled,
 }: AdministrationItemDrawerProps) {
   const configurationWizardService = useService(ConfigurationWizardService);
   const Component = item.getDrawerComponent();
 
-  const disabled = configurationWizard && !configurationWizardService.isStepAvailable(item.name);
+  if (configurationWizard) {
+    disabled = !configurationWizardService.isStepAvailable(item.name);
+  }
+
+  const onlyActive = filterOnlyActive(configurationWizard)(item) ? false : disabled;
 
   return (
     <Component
       item={item}
       configurationWizard={configurationWizard}
       style={style}
-      disabled={disabled}
+      disabled={onlyActive}
       onSelect={onSelect}
     />
   );

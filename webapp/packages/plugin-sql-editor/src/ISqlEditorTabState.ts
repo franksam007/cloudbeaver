@@ -1,43 +1,50 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { IExecutionContext } from '@cloudbeaver/plugin-data-viewer';
+import type { IConnectionExecutionContextInfo } from '@cloudbeaver/core-connections';
 
-export interface ISqlQueryParams extends IExecutionContext {
-  query: string;
-}
-
-export interface IResultExecutionInfo {
-  resultTabId: string; // to store tableView in tableViewStore
-  indexInResultSet: number;
-  sqlQueryParams: ISqlQueryParams;
-}
-
-export interface IResultDataTab {
-  resultTabId: string; // to store tableView in tableViewStore
+export interface IResultTab {
+  tabId: string;
   // when query return several results they all have one groupId
   // new group id generates every time you execute query in new tab
   groupId: string;
-  order: number;
   indexInResultSet: number;
-  name: string;
 }
 
-export interface IQueryTabGroup {
-  order: number;
+export interface IResultGroup {
   groupId: string;
-  sqlQueryParams: ISqlQueryParams;
+  modelId: string;
+  order: number;
+  nameOrder: number;
+  query: string;
 }
 
-export interface ISqlEditorTabState extends Partial<IExecutionContext> {
+export interface ISqlEditorResultTab {
+  id: string;
+  order: number;
+  name: string;
+  icon: string;
+}
+
+export interface IExecutionPlanTab {
+  tabId: string;
   order: number;
   query: string;
-  currentResultTabId?: string;
-  queryTabGroups: IQueryTabGroup[];
-  resultTabs: IResultDataTab[];
+  options?: Record<string, any>;
+}
+
+export interface ISqlEditorTabState {
+  order: number;
+  query: string;
+  executionContext?: IConnectionExecutionContextInfo;
+  currentTabId?: string;
+  tabs: ISqlEditorResultTab[];
+  resultGroups: IResultGroup[];
+  resultTabs: IResultTab[];
+  executionPlanTabs: IExecutionPlanTab[];
 }

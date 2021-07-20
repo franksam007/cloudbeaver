@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -12,12 +12,16 @@ import { composes } from '@cloudbeaver/core-theming';
 
 export const topMenuStyles = composes(
   css`
-    Menu {
+    menu-box {
       composes: theme-text-on-primary from global;
+    }
+    
+    checkbox {
+      composes: theme-checkbox_surface from global;
     }
   `,
   css`
-    Menu {
+    menu-box {
       background-color: #338ecc!important;
     }
     MenuTrigger {
@@ -51,7 +55,9 @@ export const topMenuStyles = composes(
         background: #236ea0;
       }
     }
-    MenuItem {
+    MenuItem,
+    MenuItemCheckbox,
+    MenuItemRadio {
       &:hover, &:global([aria-expanded="true"]) {
         background: #236ea0;
       }

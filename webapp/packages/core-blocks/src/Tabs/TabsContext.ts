@@ -1,32 +1,29 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
 import { createContext } from 'react';
-import { TabStateReturn } from 'reakit/Tab';
+import type { TabStateReturn } from 'reakit/Tab';
 
-import { IExecutor } from '@cloudbeaver/core-executor';
-import { MetadataMap } from '@cloudbeaver/core-utils';
+import type { IExecutor } from '@cloudbeaver/core-executor';
+import type { MetadataMap, MetadataValueGetter } from '@cloudbeaver/core-utils';
 
-import { TabsContainer } from './TabsContainer';
-
-export interface ITabData<T = Record<string, any>> {
-  tabId: string;
-  props: T;
-}
+import type { ITabData, ITabInfo, ITabsContainer } from './TabsContainer/ITabsContainer';
 
 export interface ITabsContext<T = Record<string, any>> {
   state: TabStateReturn;
   tabsState: MetadataMap<string, any>;
   props: T;
-  container?: TabsContainer<T>;
+  container?: ITabsContainer<T>;
   openExecutor: IExecutor<ITabData<T>>;
   closeExecutor: IExecutor<ITabData<T>>;
   lazy: boolean;
+  getTabInfo: (tabId: string) => ITabInfo<T> | undefined;
+  getTabState: <T>(tabId: string, valueGetter?: MetadataValueGetter<string, T>) => T;
   open: (tabId: string) => void;
   close: (tabId: string) => void;
 }

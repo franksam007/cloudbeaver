@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,9 +33,11 @@ import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
 import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.WebServiceUtils;
+import io.cloudbeaver.model.session.WebSession;
 import io.cloudbeaver.registry.WebServiceRegistry;
 import io.cloudbeaver.server.CBApplication;
 import io.cloudbeaver.service.DBWServiceBindingGraphQL;
+import io.cloudbeaver.service.WebServiceBindingBase;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.utils.IOUtils;
 
@@ -256,7 +258,7 @@ public class GraphQLEndpoint extends HttpServlet {
         response.getWriter().print(resString);
     }
 
-    private class WebInstrumentation extends SimpleInstrumentation {
+    private static class WebInstrumentation extends SimpleInstrumentation {
         @Override
         public CompletableFuture<ExecutionResult> instrumentExecutionResult(ExecutionResult executionResult, InstrumentationExecutionParameters parameters) {
             return super.instrumentExecutionResult(executionResult, parameters);
@@ -285,6 +287,12 @@ public class GraphQLEndpoint extends HttpServlet {
                 }
                 log.debug("GraphQL call failed at '" + handlerParameters.getPath() + "', " + handlerParameters.getArgumentValues(), exception);
 
+                // Log in session
+                WebSession webSession = WebServiceBindingBase.findWebSession(handlerParameters.getDataFetchingEnvironment());
+                if (webSession != null) {
+                    webSession.addSessionError(exception);
+                }
+
                 SourceLocation sourceLocation = handlerParameters.getSourceLocation();
                 ExecutionPath path = handlerParameters.getPath();
 
@@ -309,6 +317,15 @@ public class GraphQLEndpoint extends HttpServlet {
             throw new IllegalStateException("Null request");
         }
         return request;
+    }
+
+    public static HttpServletResponse getServletResponse(DataFetchingEnvironment env) {
+        GraphQLContext context = env.getContext();
+        HttpServletResponse response = context.get("response");
+        if (response == null) {
+            throw new IllegalStateException("Null response");
+        }
+        return response;
     }
 
     public static GraphQLBindingContext getBindingContext(DataFetchingEnvironment env) {

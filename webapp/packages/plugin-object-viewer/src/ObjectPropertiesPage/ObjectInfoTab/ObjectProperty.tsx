@@ -1,30 +1,17 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
-import styled, { css, use } from 'reshadow';
+import { observer } from 'mobx-react-lite';
 
-import {
-  ObjectPropertyCheckbox,
-  ObjectPropertyInput,
-  ObjectPropertyProps
-} from '../formControls';
-import { filterProperty, matchType } from '../helpers';
+import { FieldCheckboxNew, InputFieldNew } from '@cloudbeaver/core-blocks';
 
-const propertyStyles = css`
-  property {
-    composes: theme-typography--body2 from global;
-    display: flex;
-    box-sizing: border-box;
-    padding: 8px 8px;
-    width: 600px;
-  }
-`;
+import type { ObjectPropertyProps } from '../formControls';
+import { additionalProps, filterProperty, getValue, matchType } from '../helpers';
 
 export const ObjectProperty = observer(function ObjectProperty({
   objectProperty,
@@ -34,15 +21,32 @@ export const ObjectProperty = observer(function ObjectProperty({
     return null;
   }
 
-  return styled(propertyStyles)(
-    <property
-      className={className}
-      as="div"
-      {...use({ checkbox: matchType(objectProperty.dataType) === 'checkbox' })}
-    >
+  return (
+    <>
       {matchType(objectProperty.dataType) === 'checkbox'
-        ? <ObjectPropertyCheckbox objectProperty={objectProperty} />
-        : <ObjectPropertyInput objectProperty={objectProperty} />}
-    </property>
+        ? (
+          <FieldCheckboxNew
+            className={className}
+            title={objectProperty.description}
+            name={objectProperty.id}
+            value={getValue(objectProperty.value)}
+            disabled
+            {...additionalProps(objectProperty)}
+          >
+            {objectProperty.displayName}
+          </FieldCheckboxNew>
+        )
+        : (
+          <InputFieldNew
+            className={className}
+            title={objectProperty.description}
+            name={objectProperty.id}
+            value={getValue(objectProperty.value)}
+            readOnly
+            {...additionalProps(objectProperty)}
+          >{objectProperty.displayName}
+          </InputFieldNew>
+        )}
+    </>
   );
 });

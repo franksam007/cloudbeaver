@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import { useCallback, useContext } from 'react';
 import styled, { use } from 'reshadow';
 
@@ -27,7 +27,6 @@ type ControlledProps = BaseProps & {
   name?: string;
   value?: string;
   onChange?: (value: string, name?: string) => any;
-
   state?: never;
   autoHide?: never;
 };
@@ -37,7 +36,6 @@ type ObjectProps<TKey extends keyof TState, TState> = BaseProps & {
   state: TState;
   onChange?: (value: string, name: TKey) => any;
   autoHide?: boolean;
-
   value?: never;
 };
 
@@ -49,6 +47,7 @@ interface InputFieldType {
 export const InputField: InputFieldType = observer(function InputField({
   name,
   value: valueControlled,
+  defaultValue,
   required,
   state,
   children,
@@ -72,19 +71,23 @@ export const InputField: InputFieldType = observer(function InputField({
       onChange(event.target.value, name);
     }
     if (context) {
-      context.onChange(event.target.value, name);
+      context.change(event.target.value, name);
     }
   }, [state, name, context, onChange]);
 
-  const value = state ? state[name] : valueControlled;
+  let value: any = valueControlled ?? defaultValue ?? undefined;
 
-  if (autoHide && !isControlPresented(name, state)) {
+  if (state && name !== undefined && name in state) {
+    value = state[name];
+  }
+
+  if (autoHide && !isControlPresented(name, state, defaultValue)) {
     return null;
   }
 
   return styled(styles)(
     <field as="div" className={className} {...use({ long, short })}>
-      <field-label as='label'>{children} {required && '*'}</field-label>
+      <field-label as='label' title={rest.title}>{children} {required && '*'}</field-label>
       <input
         {...rest}
         name={name}

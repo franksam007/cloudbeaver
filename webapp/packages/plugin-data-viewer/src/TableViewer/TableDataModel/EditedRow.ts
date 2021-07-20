@@ -1,14 +1,14 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 
-import { TableRow, RowValues } from './TableRow';
+import type { TableRow, RowValues } from './TableRow';
 
 export interface RowDiff {
   rowIndex: number;
@@ -18,9 +18,13 @@ export interface RowDiff {
 
 export class EditedRow {
   readonly newRow: TableRow;
-  @observable private editedCells = new Set<number>();
+  private editedCells = new Set<number>();
 
   constructor(readonly rowIndex: number, readonly source: TableRow) {
+    makeObservable<EditedRow, 'editedCells'>(this, {
+      editedCells: observable,
+    });
+
     this.newRow = [...source];
   }
 

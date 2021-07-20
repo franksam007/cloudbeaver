@@ -1,35 +1,113 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable } from 'mobx';
+import { observable, makeObservable } from 'mobx';
 
 import { injectable } from '@cloudbeaver/core-di';
-import { RouterState } from '@cloudbeaver/core-routing';
+import { Executor, IExecutor, IExecutorHandler } from '@cloudbeaver/core-executor';
+import type { RouterState } from '@cloudbeaver/core-routing';
 
 import { filterConfigurationWizard } from './filterConfigurationWizard';
 import {
   IAdministrationItem, IAdministrationItemOptions, IAdministrationItemSubItem, AdministrationItemType
 } from './IAdministrationItem';
-import { IAdministrationItemRoute } from './IAdministrationItemRoute';
+import type { IAdministrationItemRoute } from './IAdministrationItemRoute';
 import { orderAdministrationItems } from './orderAdministrationItems';
+
+interface IActivationData {
+  screen: IAdministrationItemRoute;
+  configurationWizard: boolean;
+  outside: boolean;
+  outsideAdminPage: boolean;
+}
 
 @injectable()
 export class AdministrationItemService {
-  @observable items: IAdministrationItem[] = [];
+  items: IAdministrationItem[] = [];
+
+  itemActivating: boolean;
+  itemDeactivating: boolean;
+
+  private activationTask: IExecutor<IActivationData>;
+  private deActivationTask: IExecutor<IActivationData>;
+
+  constructor() {
+    makeObservable(this, {
+      items: observable,
+      itemActivating: observable,
+      itemDeactivating: observable,
+    });
+
+    this.itemActivating = false;
+    this.itemDeactivating = false;
+    this.activationTask = new Executor();
+    this.deActivationTask = new Executor();
+
+    this.activationTask
+      .addHandler(() => { this.itemActivating = true; })
+      .addHandler(this.activateHandler)
+      .addPostHandler(() => { this.itemActivating = false; });
+
+    this.deActivationTask
+      .addHandler(() => { this.itemDeactivating = true; })
+      .addHandler(this.deActivateHandler)
+      .addPostHandler(() => { this.itemDeactivating = false; });
+  }
+
+  getUniqueItems(configurationWizard: boolean): IAdministrationItem[] {
+    const items: IAdministrationItem[] = [];
+
+    const orderedByPriority = this.items.slice()
+      .sort((a, b) => {
+        if (a.name !== b.name) {
+          return a.name.localeCompare(b.name);
+        }
+
+        if (a.replace && b.replace) {
+          return (b.replace.priority ?? Number.MIN_SAFE_INTEGER) - (a.replace.priority ?? Number.MIN_SAFE_INTEGER);
+        }
+        return 0;
+      })
+      .filter(item => !item.replace?.condition || item.replace.condition(configurationWizard));
+
+    let lastItem: IAdministrationItem | null = null;
+    for (const item of orderedByPriority) {
+      if (lastItem?.name === item.name) {
+        continue;
+      }
+      items.push(item);
+      lastItem = item;
+    }
+
+    return items;
+  }
+
+  getActiveItems(configurationWizard: boolean): IAdministrationItem[] {
+    return this.getUniqueItems(configurationWizard).filter(item =>
+      filterHiddenAdministrationItem(configurationWizard)(item)
+      && filterConfigurationWizard(configurationWizard)(item)
+    ).sort(orderAdministrationItems(configurationWizard));
+  }
 
   getDefaultItem(configurationWizard: boolean): string | null {
-    const items = this.items.filter(filterConfigurationWizard(configurationWizard));
+    const items = this.getActiveItems(configurationWizard);
 
     if (items.length === 0) {
       return null;
     }
 
-    return items.sort(orderAdministrationItems(configurationWizard))[0].name;
+    const onlyActive = items.find(filterOnlyActive(configurationWizard));
+
+    if (onlyActive) {
+      return onlyActive.name;
+    }
+
+    return items[0].name;
   }
 
   getAdministrationItemRoute(state: RouterState, configurationMode = false): IAdministrationItemRoute {
@@ -41,10 +119,7 @@ export class AdministrationItemService {
   }
 
   getItem(name: string, configurationWizard: boolean): IAdministrationItem | null {
-    const item = this.items.find(item => (
-      filterConfigurationWizard(configurationWizard)(item)
-      && item.name === name
-    ));
+    const item = this.getActiveItems(configurationWizard).find(item => item.name === name);
 
     if (!item) {
       return null;
@@ -62,7 +137,7 @@ export class AdministrationItemService {
     return sub;
   }
 
-  create(options: IAdministrationItemOptions, replace?: boolean): void {
+  create(options: IAdministrationItemOptions): void {
     const type = options.type ?? AdministrationItemType.Administration;
 
     const existedIndex = this.items.findIndex(item => item.name === options.name && (
@@ -71,7 +146,7 @@ export class AdministrationItemService {
       || type === AdministrationItemType.Default
     ));
 
-    if (!replace && existedIndex !== -1) {
+    if (!options.replace && existedIndex !== -1) {
       throw new Error(`Administration item "${options.name}" already exists in the same visibility scope`);
     }
 
@@ -81,45 +156,25 @@ export class AdministrationItemService {
       sub: options.sub ?? [],
       order: options.order ?? Number.MAX_SAFE_INTEGER,
     };
-    if (replace && existedIndex !== -1) {
-      this.items.splice(existedIndex, 1, item);
-    } else {
-      this.items.push(item);
-    }
+    this.items.push(item);
   }
 
   async activate(
     screen: IAdministrationItemRoute,
     configurationWizard: boolean,
-    outside: boolean
+    outside: boolean,
+    outsideAdminPage: boolean
   ): Promise<void> {
-    const item = this.getItem(screen.item, configurationWizard);
-    if (!item) {
-      return;
-    }
-
-    await item.onActivate?.(configurationWizard, outside);
-
-    if (screen.sub) {
-      await this.getItemSub(item, screen.sub)?.onActivate?.(screen.param, configurationWizard, outside);
-    }
+    await this.activationTask.execute({ screen, configurationWizard, outside, outsideAdminPage });
   }
 
   async deActivate(
     screen: IAdministrationItemRoute,
     configurationWizard: boolean,
-    outside: boolean
+    outside: boolean,
+    outsideAdminPage: boolean
   ): Promise<void> {
-    const item = this.getItem(screen.item, configurationWizard);
-    if (!item) {
-      return;
-    }
-
-    await item.onDeActivate?.(configurationWizard, outside);
-
-    if (screen.sub) {
-      await this.getItemSub(item, screen.sub)?.onDeActivate?.(screen.param, configurationWizard, outside);
-    }
+    await this.deActivationTask.execute({ screen, configurationWizard, outside, outsideAdminPage });
   }
 
   async canActivate(
@@ -132,17 +187,95 @@ export class AdministrationItemService {
       return false;
     }
 
-    if (item.canActivate && !await item.canActivate(configurationWizard, outside)) {
+    if (item.canActivate && !(await item.canActivate(configurationWizard, outside))) {
       return false;
     }
 
     if (screen.sub) {
       const sub = this.getItemSub(item, screen.sub);
-      if (sub?.canActivate && !await sub.canActivate(screen.param, configurationWizard)) {
+      if (sub?.canActivate && !(await sub.canActivate(screen.param, configurationWizard))) {
         return false;
       }
     }
 
     return true;
   }
+
+  private activateHandler: IExecutorHandler<IActivationData> = async ({
+    screen,
+    configurationWizard,
+    outside,
+    outsideAdminPage,
+  }) => {
+    let lastItem = 0;
+    while (true) {
+      const items = this.getActiveItems(configurationWizard);
+      if (lastItem === items.length) {
+        break;
+      }
+      await items[lastItem]?.onLoad?.(configurationWizard, outside, outsideAdminPage);
+      lastItem++;
+    }
+
+    if (configurationWizard) {
+      let item = 0;
+      while (true) {
+        const items = this.getActiveItems(configurationWizard);
+        if (item === items.length) {
+          break;
+        }
+        await items[item].configurationWizardOptions?.onLoad?.();
+        item++;
+      }
+    }
+
+    const item = this.getItem(screen.item, configurationWizard);
+    if (!item) {
+      return;
+    }
+
+    await item.onActivate?.(configurationWizard, outside, outsideAdminPage);
+
+    if (screen.sub) {
+      await this.getItemSub(item, screen.sub)?.onActivate?.(screen.param, configurationWizard, outside);
+    }
+  };
+
+  private deActivateHandler: IExecutorHandler<IActivationData> = async ({
+    screen,
+    configurationWizard,
+    outside,
+    outsideAdminPage,
+  }) => {
+    const item = this.getItem(screen.item, configurationWizard);
+    if (!item) {
+      return;
+    }
+
+    await item.onDeActivate?.(configurationWizard, outside, outsideAdminPage);
+
+    if (screen.sub) {
+      await this.getItemSub(item, screen.sub)?.onDeActivate?.(screen.param, configurationWizard, outside);
+    }
+  };
+}
+
+export function filterHiddenAdministrationItem(configurationWizard: boolean): (item: IAdministrationItem) => boolean {
+  return function filterHiddenAdministrationItem(item: IAdministrationItem) {
+    if (typeof item.isHidden === 'function') {
+      return !item.isHidden(configurationWizard);
+    }
+
+    return !item.isHidden;
+  };
+}
+
+export function filterOnlyActive(configurationWizard: boolean): (item: IAdministrationItem) => boolean {
+  return function filterOnlyActive(item: IAdministrationItem) {
+    if (typeof item.isOnlyActive === 'function') {
+      return item.isOnlyActive(configurationWizard);
+    }
+
+    return item.isOnlyActive === true;
+  };
 }

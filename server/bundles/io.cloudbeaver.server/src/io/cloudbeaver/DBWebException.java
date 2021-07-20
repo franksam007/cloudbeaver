@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ public class DBWebException extends DBException implements GraphQLError {
 
     public static final String ERROR_CODE_SESSION_EXPIRED = "sessionExpired";
     public static final String ERROR_CODE_ACCESS_DENIED = "accessDenied";
+    public static final String ERROR_CODE_LICENSE_DENIED = "licenseRequired";
     public static final String ERROR_CODE_IDENT_REQUIRED = "identRequired";
     public static final String ERROR_CODE_AUTH_REQUIRED = "authRequired";
 
@@ -137,6 +138,18 @@ public class DBWebException extends DBException implements GraphQLError {
     }
 
     private static String makeMessage(String message, Throwable cause) {
+        if (CommonUtils.isEmpty(message)) {
+            if (cause != null) {
+                if (cause.getMessage() != null) {
+                    return cause.getMessage();
+                }
+                return cause.getClass().getName();
+            }
+            return "Unknown internal error";
+        }
+        if (CommonUtils.equalObjects(message, cause.getMessage())) {
+            return message;
+        }
         return message + ":\n" + cause.getMessage();
     }
 

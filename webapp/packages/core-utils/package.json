@@ -9,12 +9,14 @@
   "types": "src/index.ts",
   "scripts": {
     "prebuild": "rimraf lib/*",
-    "build": "webpack --config ../../configs/webpack.plugin.config",
+    "build": "webpack --config ../../configs/webpack.plugin.config.js",
     "postbuild": "tsc",
     "lint": "eslint ./src/ --ext .ts,.tsx",
     "lint-fix": "eslint ./src/ --ext .ts,.tsx --fix"
   },
   "dependencies": {
+    "@types/md5": "^2.2.1",
+    "md5": "^2.3.0",
     "uuid": "^7.0.3"
   },
   "peerDependencies": {

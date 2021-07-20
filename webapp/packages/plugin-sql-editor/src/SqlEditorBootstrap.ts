@@ -1,6 +1,6 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@ import {
   NavNode, ConnectionSchemaManagerService,
   isObjectCatalogProvider, isObjectSchemaProvider
 } from '@cloudbeaver/core-app';
-import { ConnectionsManagerService, isConnectionProvider } from '@cloudbeaver/core-connections';
-import { injectable } from '@cloudbeaver/core-di';
+import { isConnectionProvider } from '@cloudbeaver/core-connections';
+import { Bootstrap, injectable } from '@cloudbeaver/core-di';
 import { ContextMenuService, IMenuContext } from '@cloudbeaver/core-dialogs';
 import { ExtensionUtils } from '@cloudbeaver/core-extensions';
 import { ActiveViewService } from '@cloudbeaver/core-view';
@@ -23,24 +23,25 @@ import { ActiveViewService } from '@cloudbeaver/core-view';
 import { SqlEditorNavigatorService } from './SqlEditorNavigatorService';
 
 @injectable()
-export class SqlEditorBootstrap {
+export class SqlEditorBootstrap extends Bootstrap {
   constructor(
     private mainMenuService: MainMenuService,
     private contextMenuService: ContextMenuService,
-    private connectionsManagerService: ConnectionsManagerService,
     private sqlEditorNavigatorService: SqlEditorNavigatorService,
     private connectionSchemaManagerService: ConnectionSchemaManagerService,
     private activeViewService: ActiveViewService
-  ) {}
+  ) {
+    super();
+  }
 
-  async bootstrap() {
+  register(): void {
     this.mainMenuService.registerRootItem(
       {
         id: 'sql-editor',
         title: 'SQL',
         order: 2,
         onClick: this.openSQLEditor.bind(this),
-        isDisabled: () => !this.connectionsManagerService.hasAnyConnection(),
+        isDisabled: () => this.isSQLEntryDisabled(),
       }
     );
     this.contextMenuService.addMenuItem<NavNode>(this.contextMenuService.getRootMenuToken(), {
@@ -57,6 +58,18 @@ export class SqlEditorBootstrap {
         this.sqlEditorNavigatorService.openNewEditor(connectionId);
       },
     });
+  }
+
+  load(): void {}
+
+  private isSQLEntryDisabled() {
+    const activeView = this.activeViewService.view;
+    if (activeView) {
+      return !ExtensionUtils
+        .from(activeView.extensions)
+        .has(isConnectionProvider);
+    }
+    return !this.connectionSchemaManagerService.currentConnectionId;
   }
 
   private openSQLEditor() {

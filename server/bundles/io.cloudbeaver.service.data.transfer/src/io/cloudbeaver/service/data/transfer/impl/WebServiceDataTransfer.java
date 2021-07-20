@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -207,7 +207,9 @@ public class WebServiceDataTransfer implements DBWServiceDataTransfer {
             exporter,
             properties);
 
-        DatabaseTransferProducer producer = new DatabaseTransferProducer(dataContainer, parameters.getFilter() == null ? null : parameters.getFilter().makeDataFilter());
+        DatabaseTransferProducer producer = new DatabaseTransferProducer(
+            dataContainer,
+            parameters.getFilter() == null ? null : parameters.getFilter().makeDataFilter(monitor, dataContainer));
         DatabaseProducerSettings producerSettings = new DatabaseProducerSettings();
         producerSettings.setExtractType(DatabaseProducerSettings.ExtractType.SINGLE_QUERY);
         producerSettings.setQueryRowCount(false);

@@ -1,54 +1,30 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observable, computed } from 'mobx';
+import { observable, computed, makeObservable } from 'mobx';
 
 import { injectable } from '@cloudbeaver/core-di';
 import { CommonDialogService, ConfirmationDialog, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { resourceKeyList } from '@cloudbeaver/core-sdk';
 
-import { AdminConnection, ConnectionsResource } from '../ConnectionsResource';
+import { DatabaseConnection, compareConnections, ConnectionsResource } from '../ConnectionsResource';
 
 @injectable()
 export class ConnectionsAdministrationController {
-  @observable isProcessing = false;
+  isProcessing = false;
   readonly selectedItems = observable<string, boolean>(new Map());
   readonly expandedItems = observable<string, boolean>(new Map());
-  @computed
-  get connections(): AdminConnection[] {
-    return Array.from(this.connectionsResource.data.values())
-      .sort((a, b) => {
-        const isANew = this.connectionsResource.isNew(a.id);
-        const isBNew = this.connectionsResource.isNew(b.id);
-
-        if (isANew === isBNew) {
-          return a.name.localeCompare(b.name);
-        }
-
-        if (isBNew) {
-          return 1;
-        }
-
-        if (isANew) {
-          return -1;
-        }
-
-        return a.name.localeCompare(b.name);
-      });
+  get connections(): DatabaseConnection[] {
+    return this.connectionsResource.values.slice().sort(compareConnections);
   }
 
-  @computed
-  get isLoading(): boolean {
-    return this.connectionsResource.isLoading() || this.isProcessing;
-  }
-
-  @computed get itemsSelected(): boolean {
+  get itemsSelected(): boolean {
     return Array.from(this.selectedItems.values()).some(v => v);
   }
 
@@ -56,13 +32,26 @@ export class ConnectionsAdministrationController {
     private notificationService: NotificationService,
     private connectionsResource: ConnectionsResource,
     private commonDialogService: CommonDialogService
-  ) { }
+  ) {
+    makeObservable(this, {
+      isProcessing: observable,
+      connections: computed,
+      itemsSelected: computed,
+    });
+  }
 
   update = async (): Promise<void> => {
+    if (this.isProcessing) {
+      return;
+    }
+    this.isProcessing = true;
     try {
-      await this.connectionsResource.refresh('all');
+      await this.connectionsResource.refreshAll();
+      this.notificationService.logSuccess({ title: 'connections_administration_tools_refresh_success' });
     } catch (exception) {
-      this.notificationService.logException(exception, 'Connections update failed');
+      this.notificationService.logException(exception, 'connections_administration_tools_refresh_fail');
+    } finally {
+      this.isProcessing = false;
     }
   };
 

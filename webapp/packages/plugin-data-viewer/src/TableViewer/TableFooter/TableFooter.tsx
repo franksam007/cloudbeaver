@@ -1,37 +1,31 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import { useCallback, useRef } from 'react';
 import styled, { css, use } from 'reshadow';
 
-import { IconButton, SubmittingForm } from '@cloudbeaver/core-blocks';
-import { ResultDataFormat } from '@cloudbeaver/core-sdk';
+import { IconOrImage, SubmittingForm, ToolsPanel } from '@cloudbeaver/core-blocks';
 import { composes, useStyles } from '@cloudbeaver/core-theming';
 
-import { DataModelWrapper } from '../DataModelWrapper';
+import type { IDatabaseDataModel } from '../../DatabaseDataModel/IDatabaseDataModel';
 import { TableFooterMenu } from './TableFooterMenu/TableFooterMenu';
 
 const tableFooterStyles = composes(
   css`
-    table-footer {
-      composes: theme-background-secondary theme-text-on-secondary from global;
-    }
     reload {
       composes: theme-text-primary theme-ripple from global;
     }
   `,
   css`
-    table-footer {
-      height: 40px;
-      flex: 0 0 auto;
-      display: flex;
+    ToolsPanel {
       align-items: center;
+      flex: 0 0 auto;
     }
     count input,
     count placeholder {
@@ -46,7 +40,14 @@ const tableFooterStyles = composes(
     reload {
       height: 100%;
       display: flex;
+      cursor: pointer;
       align-items: center;
+      padding: 0 16px;
+
+      & IconOrImage {
+        width: 24px;
+        height: 24px;
+      }
     }
     IconButton {
       position: relative;
@@ -54,7 +55,6 @@ const tableFooterStyles = composes(
       width: 24px;
       display: block;
     }
-    reload,
     count,
     TableFooterMenu {
       margin-left: 16px;
@@ -68,10 +68,12 @@ const tableFooterStyles = composes(
 );
 
 interface TableFooterProps {
-  model: DataModelWrapper;
+  resultIndex: number;
+  model: IDatabaseDataModel<any, any>;
 }
 
 export const TableFooter = observer(function TableFooter({
+  resultIndex,
   model,
 }: TableFooterProps) {
   const ref = useRef<HTMLInputElement>(null);
@@ -90,29 +92,31 @@ export const TableFooter = observer(function TableFooter({
     [model]
   );
 
+  const disabled = model.isLoading() || model.isDisabled(resultIndex);
+
   return styled(useStyles(tableFooterStyles))(
-    <table-footer as="div">
-      <reload as="div">
-        <IconButton type="button" name='reload' viewBox="0 0 16 16" onClick={() => model.refresh()} />
+    <ToolsPanel>
+      <reload aria-disabled={disabled} onClick={() => model.refresh()}>
+        <IconOrImage icon='reload' viewBox="0 0 16 16" />
       </reload>
-      <count as="div">
+      <count>
         <SubmittingForm onSubmit={handleChange}>
-          <input ref={ref} type="number" value={model.countGain} onBlur={handleChange} {...use({ mod: 'surface' })} />
+          <input
+            ref={ref}
+            type="number"
+            value={model.countGain}
+            disabled={disabled}
+            onBlur={handleChange}
+            {...use({ mod: 'surface' })}
+          />
         </SubmittingForm>
       </count>
-      <TableFooterMenu model={model} />
-      {(model.source.dataFormat === ResultDataFormat.Resultset
-      && model.deprecatedModel.requestStatusMessage.length > 0) && (
-        <time>
-          {model.deprecatedModel.requestStatusMessage} - {model.deprecatedModel.queryDuration}ms
-        </time>
-      )}
-      {(model.source.dataFormat !== ResultDataFormat.Resultset
-      && model.source.requestInfo.requestMessage.length > 0) && (
+      <TableFooterMenu model={model} resultIndex={resultIndex} />
+      {model.source.requestInfo.requestMessage.length > 0 && (
         <time>
           {model.source.requestInfo.requestMessage} - {model.source.requestInfo.requestDuration}ms
         </time>
       )}
-    </table-footer>
+    </ToolsPanel>
   );
 });

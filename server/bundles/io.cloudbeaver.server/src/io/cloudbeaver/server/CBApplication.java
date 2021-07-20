@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import com.google.gson.stream.JsonWriter;
 import io.cloudbeaver.DBWConnectionGrant;
 import io.cloudbeaver.DBWSecurityController;
 import io.cloudbeaver.WebServiceUtils;
+import io.cloudbeaver.model.session.WebAuthInfo;
 import io.cloudbeaver.registry.WebServiceRegistry;
 import io.cloudbeaver.server.jetty.CBJettyServer;
 import io.cloudbeaver.service.DBWServiceInitializer;
@@ -30,6 +31,7 @@ import org.eclipse.core.runtime.Platform;
 import org.eclipse.equinox.app.IApplicationContext;
 import org.eclipse.osgi.service.datalocation.Location;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.ModelPreferences;
@@ -72,6 +74,7 @@ public class CBApplication extends BaseApplicationImpl {
         return (CBApplication) BaseApplicationImpl.getInstance();
     }
 
+    private String serverURL;
     private int serverPort = CBConstants.DEFAULT_SERVER_PORT;
     private String serverName = null;
     private String contentRoot = CBConstants.DEFAULT_CONTENT_ROOT;
@@ -91,8 +94,6 @@ public class CBApplication extends BaseApplicationImpl {
     private CBDatabase database;
     private CBSecurityController securityController;
 
-    private DBNBrowseSettings defaultNavigatorSettings = DataSourceNavigatorSettings.PRESET_FULL.getSettings();
-
     private long maxSessionIdleTime = CBConstants.MAX_SESSION_IDLE_TIME;
 
     private boolean develMode = false;
@@ -101,6 +102,10 @@ public class CBApplication extends BaseApplicationImpl {
     private final List<InetAddress> localInetAddresses = new ArrayList<>();
 
     public CBApplication() {
+    }
+
+    public String getServerURL() {
+        return serverURL;
     }
 
     public int getServerPort() {
@@ -174,7 +179,7 @@ public class CBApplication extends BaseApplicationImpl {
         try {
             loadConfiguration(configPath);
 
-            File runtimeConfigFile = getRuntimeConfigFile();
+            File runtimeConfigFile = getRuntimeAppConfigFile();
             if (runtimeConfigFile.exists()) {
                 log.debug("Runtime configuration [" + runtimeConfigFile.getAbsolutePath() + "]");
                 parseConfiguration(runtimeConfigFile);
@@ -226,7 +231,7 @@ public class CBApplication extends BaseApplicationImpl {
         log.debug("\tContent root: " + new File(contentRoot).getAbsolutePath());
         log.debug("\tDrivers storage: " + new File(driversLocation).getAbsolutePath());
         //log.debug("\tDrivers root: " + driversLocation);
-        log.debug("\tProduct details: " + application.getInfoDetails());
+        //log.debug("\tProduct details: " + application.getInfoDetails());
         log.debug("\tBase port: " + serverPort);
         log.debug("\tBase URI: " + servicesURI);
         if (develMode) {
@@ -274,11 +279,75 @@ public class CBApplication extends BaseApplicationImpl {
         });
         Runtime.getRuntime().addShutdownHook(shutdownThread);
 
+        if (configurationMode) {
+            // Try to configure automatically
+            performAutoConfiguration(new File(configPath).getParentFile());
+        }
+
+        try {
+            initializeServer();
+        } catch (DBException e) {
+            log.error("Error initializing server", e);
+            return null;
+        }
         runWebServer();
 
         log.debug("Shutdown");
 
         return null;
+    }
+
+    /**
+     * Configures server automatically.
+     * Called on startup
+     * @param configPath
+     */
+    protected void performAutoConfiguration(File configPath) {
+        String autoServerName = System.getenv(CBConstants.VAR_AUTO_CB_SERVER_NAME);
+        String autoServerURL = System.getenv(CBConstants.VAR_AUTO_CB_SERVER_URL);
+        String autoAdminName = System.getenv(CBConstants.VAR_AUTO_CB_ADMIN_NAME);
+        String autoAdminPassword = System.getenv(CBConstants.VAR_AUTO_CB_ADMIN_PASSWORD);
+
+        if (CommonUtils.isEmpty(autoServerName) || CommonUtils.isEmpty(autoAdminName) || CommonUtils.isEmpty(autoAdminPassword)) {
+            // Try to load from auto config file
+            if (configPath.exists()) {
+                File autoConfigFile = new File(configPath, CBConstants.AUTO_CONFIG_FILE_NAME);
+                if (autoConfigFile.exists()) {
+                    Properties autoProps = new Properties();
+                    try (InputStream is = new FileInputStream(autoConfigFile)) {
+                        autoProps.load(is);
+
+                        autoServerName = autoProps.getProperty(CBConstants.VAR_AUTO_CB_SERVER_NAME);
+                        autoServerURL = autoProps.getProperty(CBConstants.VAR_AUTO_CB_SERVER_URL);
+                        autoAdminName = autoProps.getProperty(CBConstants.VAR_AUTO_CB_ADMIN_NAME);
+                        autoAdminPassword = autoProps.getProperty(CBConstants.VAR_AUTO_CB_ADMIN_PASSWORD);
+                    } catch (IOException e) {
+                        log.error("Error loading auto configuration file '" + autoConfigFile.getAbsolutePath() + "'", e);
+                    }
+                }
+            }
+        }
+
+        if (CommonUtils.isEmpty(autoServerName) || CommonUtils.isEmpty(autoAdminName) || CommonUtils.isEmpty(autoAdminPassword)) {
+            log.info("No auto configuration was found. Server must be configured manually");
+            return;
+        }
+        try {
+            finishConfiguration(
+                autoServerName,
+                autoServerURL,
+                autoAdminName,
+                autoAdminPassword,
+                Collections.emptyList(),
+                maxSessionIdleTime,
+                getAppConfiguration());
+        } catch (Exception e) {
+            log.error("Error loading server auto configuration", e);
+        }
+    }
+
+    protected void initializeServer() throws DBException {
+
     }
 
     private void determineLocalAddresses() {
@@ -317,8 +386,13 @@ public class CBApplication extends BaseApplicationImpl {
     }
 
     @NotNull
-    private File getRuntimeConfigFile() {
-        return new File(getDataDirectory(false), CBConstants.RUNTIME_CONFIG_FILE_NAME);
+    private File getRuntimeAppConfigFile() {
+        return new File(getDataDirectory(false), CBConstants.RUNTIME_APP_CONFIG_FILE_NAME);
+    }
+
+    @NotNull
+    private File getRuntimeProductConfigFile() {
+        return new File(getDataDirectory(false), CBConstants.RUNTIME_PRODUCT_CONFIG_FILE_NAME);
     }
 
     @NotNull
@@ -373,12 +447,14 @@ public class CBApplication extends BaseApplicationImpl {
         InstanceCreator<CBAppConfig> appConfigCreator = type -> appConfiguration;
         InstanceCreator<CBDatabaseConfig> dbConfigCreator = type -> databaseConfiguration;
         InstanceCreator<CBDatabaseConfig.Pool> dbPoolConfigCreator = type -> databaseConfiguration.getPool();
+        InstanceCreator<DataSourceNavigatorSettings> navSettingsCreator = type -> (DataSourceNavigatorSettings) appConfiguration.getDefaultNavigatorSettings();
 
         Gson gson = new GsonBuilder()
             .setLenient()
             .registerTypeAdapter(CBAppConfig.class, appConfigCreator)
             .registerTypeAdapter(CBDatabaseConfig.class, dbConfigCreator)
             .registerTypeAdapter(CBDatabaseConfig.Pool.class, dbPoolConfigCreator)
+            .registerTypeAdapter(DataSourceNavigatorSettings.class, navSettingsCreator)
             .create();
 
         try (Reader reader = new InputStreamReader(new FileInputStream(configFile), StandardCharsets.UTF_8)) {
@@ -386,6 +462,12 @@ public class CBApplication extends BaseApplicationImpl {
 
             Map<String, Object> serverConfig = JSONUtils.getObject(configProps, "server");
             serverPort = JSONUtils.getInteger(serverConfig, CBConstants.PARAM_SERVER_PORT, serverPort);
+            if (serverConfig.containsKey(CBConstants.PARAM_SERVER_URL)) {
+                serverURL = JSONUtils.getString(serverConfig, CBConstants.PARAM_SERVER_URL, serverURL);
+            } else if (serverURL == null) {
+                serverURL = "http://" + InetAddress.getLocalHost().getHostName() + ":" + serverPort;
+            }
+
             serverName = JSONUtils.getString(serverConfig, CBConstants.PARAM_SERVER_NAME, serverName);
             contentRoot = getRelativePath(
                 JSONUtils.getString(serverConfig, CBConstants.PARAM_CONTENT_ROOT, contentRoot), homeFolder);
@@ -400,9 +482,11 @@ public class CBApplication extends BaseApplicationImpl {
 
             develMode = JSONUtils.getBoolean(serverConfig, CBConstants.PARAM_DEVEL_MODE, develMode);
 
+            // App config
             gson.fromJson(
                 gson.toJsonTree(JSONUtils.getObject(configProps, "app")), CBAppConfig.class);
 
+            // Database config
             gson.fromJson(
                 gson.toJsonTree(JSONUtils.getObject(serverConfig, "database")), CBDatabaseConfig.class);
 
@@ -422,6 +506,19 @@ public class CBApplication extends BaseApplicationImpl {
                     productConfiguration.putAll(JSONUtils.parseMap(gson, reader));
                 } catch (Exception e) {
                     log.error("Error reading product configuration", e);
+                }
+            }
+        }
+
+        // Add product config from runtime
+        {
+            File rtConfig = getRuntimeProductConfigFile();
+            if (rtConfig.exists()) {
+                log.debug("Load product runtime configuration from '" + rtConfig.getAbsolutePath() + "'");
+                try (Reader reader = new InputStreamReader(new FileInputStream(rtConfig), StandardCharsets.UTF_8)) {
+                    productConfiguration.putAll(JSONUtils.parseMap(gson, reader));
+                } catch (Exception e) {
+                    log.error("Error reading product runtime configuration", e);
                 }
             }
         }
@@ -455,7 +552,7 @@ public class CBApplication extends BaseApplicationImpl {
 
     @Override
     public String getInfoDetails() {
-        return serverName;
+        return "";
     }
 
     @Override
@@ -489,23 +586,25 @@ public class CBApplication extends BaseApplicationImpl {
     }
 
     public synchronized void finishConfiguration(
-        String newServerName,
-        String adminName,
-        String adminPassword,
+        @NotNull String newServerName,
+        @NotNull String newServerURL,
+        @NotNull String adminName,
+        @Nullable String adminPassword,
+        @NotNull List<WebAuthInfo> authInfoList,
         long sessionExpireTime,
-        CBAppConfig appConfig) throws DBException
+        @NotNull CBAppConfig appConfig) throws DBException
     {
         if (!RECONFIGURATION_ALLOWED && !isConfigurationMode()) {
             throw new DBException("Application must be in configuration mode");
         }
 
         if (isConfigurationMode()) {
-            database.finishConfiguration(adminName, adminPassword);
+            database.finishConfiguration(adminName, adminPassword, authInfoList);
         }
 
         // Save runtime configuration
         log.debug("Saving runtime configuration");
-        saveRuntimeConfig(newServerName, sessionExpireTime, appConfig);
+        saveRuntimeConfig(newServerName, newServerURL, sessionExpireTime, appConfig);
 
         // Grant permissions to predefined connections
         if (isConfigurationMode() && appConfig.isAnonymousAccessEnabled()) {
@@ -515,7 +614,7 @@ public class CBApplication extends BaseApplicationImpl {
         // Re-load runtime configuration
         try {
             log.debug("Reloading application configuration");
-            File runtimeConfigFile = getRuntimeConfigFile();
+            File runtimeConfigFile = getRuntimeAppConfigFile();
             if (runtimeConfigFile.exists()) {
                 log.debug("Runtime configuration [" + runtimeConfigFile.getAbsolutePath() + "]");
                 parseConfiguration(runtimeConfigFile);
@@ -526,6 +625,11 @@ public class CBApplication extends BaseApplicationImpl {
 
         configurationMode = CommonUtils.isEmpty(serverName);
     }
+
+    public synchronized void flushConfiguration() throws DBException {
+        saveRuntimeConfig(serverName, serverURL, maxSessionIdleTime, appConfiguration);
+    }
+
 
     private void grantAnonymousAccessToConnections(CBAppConfig appConfig, String adminName) {
         try {
@@ -545,9 +649,9 @@ public class CBApplication extends BaseApplicationImpl {
         }
     }
 
-    private void saveRuntimeConfig(String newServerName, long sessionExpireTime, CBAppConfig appConfig) throws DBException {
+    private void saveRuntimeConfig(String newServerName, String newServerURL, long sessionExpireTime, CBAppConfig appConfig) throws DBException {
 
-        File runtimeConfigFile = getRuntimeConfigFile();
+        File runtimeConfigFile = getRuntimeAppConfigFile();
         try (Writer out = new OutputStreamWriter(new FileOutputStream(runtimeConfigFile), StandardCharsets.UTF_8)) {
             Gson gson = new GsonBuilder()
                 .setLenient()
@@ -562,6 +666,9 @@ public class CBApplication extends BaseApplicationImpl {
                     if (!CommonUtils.isEmpty(newServerName)) {
                         JSONUtils.field(json, CBConstants.PARAM_SERVER_NAME, newServerName);
                     }
+                    if (!CommonUtils.isEmpty(newServerURL)) {
+                        JSONUtils.field(json, CBConstants.PARAM_SERVER_URL, newServerURL);
+                    }
                     if (sessionExpireTime > 0) {
                         JSONUtils.field(json, CBConstants.PARAM_SESSION_EXPIRE_PERIOD, sessionExpireTime);
                     }
@@ -571,11 +678,42 @@ public class CBApplication extends BaseApplicationImpl {
                     json.name("app");
                     json.beginObject();
                     JSONUtils.field(json, "anonymousAccessEnabled", appConfig.isAnonymousAccessEnabled());
-                    JSONUtils.field(json, "authenticationEnabled", appConfig.isAuthenticationEnabled());
                     JSONUtils.field(json, "supportsCustomConnections", appConfig.isSupportsCustomConnections());
+                    JSONUtils.field(json, "publicCredentialsSaveEnabled", appConfig.isPublicCredentialsSaveEnabled());
+                    JSONUtils.field(json, "adminCredentialsSaveEnabled", appConfig.isAdminCredentialsSaveEnabled());
+
+                    {
+                        // Save only differences in def navigator settings
+                        DBNBrowseSettings navSettings = appConfig.getDefaultNavigatorSettings();
+
+                        json.name("defaultNavigatorSettings");
+                        json.beginObject();
+                        if (navSettings.isShowSystemObjects() != CBAppConfig.DEFAULT_VIEW_SETTINGS.isShowSystemObjects())
+                            JSONUtils.field(json, "showSystemObjects", navSettings.isShowSystemObjects());
+                        if (navSettings.isShowUtilityObjects() != CBAppConfig.DEFAULT_VIEW_SETTINGS.isShowUtilityObjects())
+                            JSONUtils.field(json, "showUtilityObjects", navSettings.isShowUtilityObjects());
+                        if (navSettings.isShowOnlyEntities() != CBAppConfig.DEFAULT_VIEW_SETTINGS.isShowOnlyEntities())
+                            JSONUtils.field(json, "showOnlyEntities", navSettings.isShowOnlyEntities());
+                        if (navSettings.isMergeEntities() != CBAppConfig.DEFAULT_VIEW_SETTINGS.isMergeEntities())
+                            JSONUtils.field(json, "mergeEntities", navSettings.isMergeEntities());
+                        if (navSettings.isHideFolders() != CBAppConfig.DEFAULT_VIEW_SETTINGS.isHideFolders())
+                            JSONUtils.field(json, "hideFolders", navSettings.isHideFolders());
+                        if (navSettings.isMergeSchemas() != CBAppConfig.DEFAULT_VIEW_SETTINGS.isMergeSchemas())
+                            JSONUtils.field(json, "hideSchemas", navSettings.isMergeSchemas());
+                        if (navSettings.isHideVirtualModel() != CBAppConfig.DEFAULT_VIEW_SETTINGS.isHideVirtualModel())
+                            JSONUtils.field(json, "hideVirtualModel", navSettings.isHideVirtualModel());
+
+                        json.endObject();
+                    }
+                    if (appConfig.getEnabledAuthProviders() != null) {
+                        JSONUtils.serializeStringList(json, "enabledAuthProviders", Arrays.asList(appConfig.getEnabledAuthProviders()), true);
+                    }
 
                     if (!CommonUtils.isEmpty(appConfig.getPlugins())) {
                         JSONUtils.serializeProperties(json, "plugins", appConfig.getPlugins());
+                    }
+                    if (!CommonUtils.isEmpty(appConfig.getAuthConfiguration())) {
+                        JSONUtils.serializeProperties(json, "authConfiguration", appConfig.getAuthConfiguration());
                     }
 
                     json.endObject();
@@ -588,12 +726,15 @@ public class CBApplication extends BaseApplicationImpl {
         }
     }
 
-    public DBNBrowseSettings getDefaultNavigatorSettings() {
-        return defaultNavigatorSettings;
+    ////////////////////////////////////////////////////////////////////////
+    // License management
+
+    public boolean isLicenseRequired() {
+        return false;
     }
 
-    public void setDefaultNavigatorSettings(DBNBrowseSettings defaultNavigatorSettings) {
-        this.defaultNavigatorSettings = defaultNavigatorSettings;
+    public boolean isLicenseValid() {
+        return false;
     }
 
 }

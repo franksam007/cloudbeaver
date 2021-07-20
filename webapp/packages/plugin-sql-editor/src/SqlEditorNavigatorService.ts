@@ -1,20 +1,21 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
 import { NavigationTabsService } from '@cloudbeaver/core-app';
-import { ConnectionsManagerService, ConnectionInfoResource } from '@cloudbeaver/core-connections';
+import { ConnectionsManagerService } from '@cloudbeaver/core-connections';
 import { injectable } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { IExecutor, Executor, IExecutionContextProvider } from '@cloudbeaver/core-executor';
+import { NavigationService } from '@cloudbeaver/core-ui';
 
-import { ISqlEditorTabState } from './ISqlEditorTabState';
+import type { ISqlEditorTabState } from './ISqlEditorTabState';
 import { SqlEditorTabService, isSQLEditorTab } from './SqlEditorTabService';
-import { SqlExecutionState } from './SqlExecutionState';
+import { SqlResultTabsService } from './SqlResultTabs/SqlResultTabsService';
 
 enum SQLEditorNavigationAction {
   create,
@@ -49,13 +50,15 @@ export class SqlEditorNavigatorService {
     private navigationTabsService: NavigationTabsService,
     private connectionsManagerService: ConnectionsManagerService,
     private notificationService: NotificationService,
-    private connectionInfoResource: ConnectionInfoResource,
-    private sqlEditorTabService: SqlEditorTabService
+    private sqlEditorTabService: SqlEditorTabService,
+    private readonly sqlResultTabsService: SqlResultTabsService,
+    navigationService: NavigationService
   ) {
     this.navigator = new Executor<SQLCreateAction | SQLEditorAction>(
       null,
       (active, current) => active.type === current.type
     )
+      .before(navigationService.navigationTask)
       .addHandler(this.navigateHandler.bind(this));
     this.connectionsManagerService.onCloseConnection.subscribe(this.handleConnectionClose.bind(this));
   }
@@ -88,9 +91,9 @@ export class SqlEditorNavigatorService {
   private async handleConnectionClose(connectionId: string) {
     try {
       for (const tab of this.navigationTabsService.findTabs<ISqlEditorTabState>(
-        isSQLEditorTab(tab => !!tab.handlerState.connectionId?.includes(connectionId))
+        isSQLEditorTab(tab => !!tab.handlerState.executionContext?.connectionId.includes(connectionId))
       )) {
-        tab.handlerState.contextId = undefined;
+        this.sqlEditorTabService.resetConnectionInfo(tab.handlerState);
       }
       return;
     } catch (exception) {
@@ -103,7 +106,7 @@ export class SqlEditorNavigatorService {
     contexts: IExecutionContextProvider<SQLCreateAction | SQLEditorAction>
   ) {
     try {
-      const tabInfo = await contexts.getContext(this.navigationTabsService.navigationTabContext);
+      const tabInfo = contexts.getContext(this.navigationTabsService.navigationTabContext);
 
       if (data.type === SQLEditorNavigationAction.create) {
         const tabOptions = await this.sqlEditorTabService.createNewEditor(
@@ -113,10 +116,7 @@ export class SqlEditorNavigatorService {
         );
 
         if (tabOptions) {
-          const tab = tabInfo.openNewTab(tabOptions);
-
-          // FIXME: should be in SqlEditorTabService
-          this.sqlEditorTabService.tabExecutionState.set(tab.id, new SqlExecutionState());
+          tabInfo.openNewTab(tabOptions);
         }
         return;
       }
@@ -127,9 +127,9 @@ export class SqlEditorNavigatorService {
       }
 
       if (data.type === SQLEditorNavigationAction.select) {
-        this.sqlEditorTabService.selectResultTab(tab, data.resultId);
+        this.sqlEditorTabService.selectResultTab(tab.handlerState, data.resultId);
       } else if (data.type === SQLEditorNavigationAction.close) {
-        await this.sqlEditorTabService.closeResultTab(tab, data.resultId);
+        await this.sqlResultTabsService.removeResultTab(tab.handlerState, data.resultId);
       }
       this.navigationTabsService.selectTab(tab.id);
     } catch (exception) {

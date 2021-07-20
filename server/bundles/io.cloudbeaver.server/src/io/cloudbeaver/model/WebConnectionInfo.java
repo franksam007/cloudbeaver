@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Web connection info
@@ -48,7 +49,9 @@ public class WebConnectionInfo {
     private String connectTime;
     private String serverVersion;
     private String clientVersion;
-    private Map<String, Object> savedAuthProperties;
+
+    private transient Map<String, Object> savedAuthProperties;
+    private transient List<WebNetworkHandlerConfigInput> savedNetworkCredentials;
 
     public WebConnectionInfo(WebSession session, DBPDataSourceContainer ds) {
         this.session = session;
@@ -74,7 +77,7 @@ public class WebConnectionInfo {
 
     @Property
     public String getDriverId() {
-        return WebServiceUtils.makeDriverFullId(dataSourceContainer.getDriver());
+        return dataSourceContainer.getDriver().getFullId();
     }
 
     @Property
@@ -260,13 +263,19 @@ public class WebConnectionInfo {
         // Fill session and user provided credentials
         boolean hasContextCredentials = session.hasContextCredentials();
         DBPConnectionConfiguration configWithAuth = new DBPConnectionConfiguration(dataSourceContainer.getConnectionConfiguration());
-        session.provideAuthParameters(dataSourceContainer, configWithAuth);
+        session.provideAuthParameters(session.getProgressMonitor(), dataSourceContainer, configWithAuth);
 
 
         DBPPropertySource credentialsSource = authModel.createCredentialsSource(dataSourceContainer, configWithAuth);
         return Arrays.stream(credentialsSource.getProperties())
             .filter(p -> WebServiceUtils.isAuthPropertyApplicable(p, hasContextCredentials))
             .map(p -> new WebPropertyInfo(session, p, credentialsSource)).toArray(WebPropertyInfo[]::new);
+    }
+
+    @Property
+    public List<WebNetworkHandlerConfig> getNetworkHandlersConfig() {
+        return dataSourceContainer.getConnectionConfiguration().getHandlers().stream()
+            .map(WebNetworkHandlerConfig::new).collect(Collectors.toList());
     }
 
     @Property
@@ -279,8 +288,23 @@ public class WebConnectionInfo {
         return savedAuthProperties;
     }
 
-    public void setSavedAuthProperties(Map<String, Object> authProperties) {
+    public List<WebNetworkHandlerConfigInput> getSavedNetworkCredentials() {
+        return savedNetworkCredentials;
+    }
+
+    public void setSavedCredentials(Map<String, Object> authProperties, List<WebNetworkHandlerConfigInput> networkCredentials) {
         this.savedAuthProperties = authProperties;
+        this.savedNetworkCredentials = networkCredentials;
+    }
+
+    public void clearSavedCredentials() {
+        this.savedAuthProperties = null;
+        this.savedNetworkCredentials = null;
+    }
+
+    @Property
+    public Map<String, String> getProviderProperties() {
+        return dataSourceContainer.getConnectionConfiguration().getProviderProperties();
     }
 
 }

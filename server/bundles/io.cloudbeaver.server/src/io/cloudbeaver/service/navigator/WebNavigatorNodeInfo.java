@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -117,6 +117,15 @@ public class WebNavigatorNodeInfo {
         }
         if (node instanceof DBNContainer) {
             features.add("container");
+        }
+        boolean isShared = false;
+        if (node instanceof DBNDatabaseNode) {
+            isShared = !((DBNDatabaseNode) node).getDataSourceContainer().isManageable();
+        } else if (node instanceof DBNLocalFolder) {
+            //isShared = ((DBNLocalFolder) node).getDataSourceRegistry().is
+        }
+        if (isShared) {
+            features.add("shared");
         }
         return features.toArray(new String[0]);
     }

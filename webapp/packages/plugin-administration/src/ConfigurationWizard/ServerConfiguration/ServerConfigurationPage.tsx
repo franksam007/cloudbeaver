@@ -1,123 +1,140 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
-import styled, { use, css } from 'reshadow';
+import { observer } from 'mobx-react-lite';
+import styled, { css } from 'reshadow';
 
-import { AdministrationTools, ADMINISTRATION_TOOLS_STYLES } from '@cloudbeaver/core-administration';
-import { FormBox, FormBoxElement, IconButton, Loader, SubmittingForm, useFocus } from '@cloudbeaver/core-blocks';
-import { useController, useService } from '@cloudbeaver/core-di';
-import { useFormValidator } from '@cloudbeaver/core-executor';
+import { AdministrationItemContentComponent, ADMINISTRATION_TOOLS_PANEL_STYLES, ConfigurationWizardService } from '@cloudbeaver/core-administration';
+import { BASE_CONTAINERS_STYLES, ColoredContainer, Container, Group, GroupItem, GroupTitle, ToolsAction, Loader, Placeholder, SubmittingForm, useFocus, useFormValidator, ToolsPanel } from '@cloudbeaver/core-blocks';
+import { useService } from '@cloudbeaver/core-di';
+import { CommonDialogService, ConfirmationDialog, DialogueStateResult } from '@cloudbeaver/core-dialogs';
 import { useTranslate } from '@cloudbeaver/core-localization';
-import { useStyles, composes } from '@cloudbeaver/core-theming';
+import { ServerConfigResource } from '@cloudbeaver/core-root';
+import { useStyles } from '@cloudbeaver/core-theming';
 
-import { ServerConfigurationAdminForm } from './Form/ServerConfigurationAdminForm';
 import { ServerConfigurationConfigurationForm } from './Form/ServerConfigurationConfigurationForm';
 import { ServerConfigurationInfoForm } from './Form/ServerConfigurationInfoForm';
-import { ServerConfigurationPageController } from './ServerConfigurationPageController';
+import { ServerConfigurationNavigatorViewForm } from './Form/ServerConfigurationNavigatorViewForm';
+import { ServerConfigurationSecurityForm } from './Form/ServerConfigurationSecurityForm';
 import { ServerConfigurationService } from './ServerConfigurationService';
 
-const styles = composes(
-  css`
-  layout-grid-cell {
-    composes: theme-background-surface theme-text-on-surface theme-border-color-background from global;
+const styles = css`
+  SubmittingForm {
+    flex: 1;
+    display: flex;
+    overflow: auto;
+    flex-direction: column;
   }
 
-  layout-grid-cell, message-box {
-    composes: theme-border-color-background from global;
+  p {
+    white-space: pre-wrap;
+    line-height: 2;
   }
-  `,
-  css`
-    layout-grid {
-      width: 100%;
-      flex: 1;
-    }
+`;
 
-    layout-grid-inner {
-      min-height: 100%;
-    }
-
-    layout-grid-cell {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      border: solid 1px;
-    }
-
-    message-box {
-      border-bottom: solid 1px;
-    }
-
-    message-box, SubmittingForm {
-      padding: 16px 24px;
-    }
-
-    SubmittingForm {
-      flex: 1;
-      display: flex;
-      overflow: auto;
-      flex-direction: column;
-    }
-
-    FormBox {
-      flex: 0;
-    }
-
-    p {
-      line-height: 2;
-    }
-  `
-);
-
-export const ServerConfigurationPage = observer(function ServerConfigurationPage() {
+export const ServerConfigurationPage: AdministrationItemContentComponent = observer(function ServerConfigurationPage({
+  configurationWizard,
+}) {
   const translate = useTranslate();
-  const style = useStyles(styles, ADMINISTRATION_TOOLS_STYLES);
+  const style = useStyles(styles, ADMINISTRATION_TOOLS_PANEL_STYLES, BASE_CONTAINERS_STYLES);
   const [focusedRef] = useFocus<HTMLFormElement>({ focusFirstChild: true });
   const service = useService(ServerConfigurationService);
-  const controller = useController(ServerConfigurationPageController);
+  const serverConfigResource = useService(ServerConfigResource);
+  const commonDialogService = useService(CommonDialogService);
+  const configurationWizardService = useService(ConfigurationWizardService);
+  const changed = serverConfigResource.isChanged() || serverConfigResource.isNavigatorSettingsChanged();
   useFormValidator(service.validationTask, focusedRef);
 
+  function handleChange() {
+    service.changed();
+
+    if (!service.state.serverConfig.adminCredentialsSaveEnabled) {
+      service.state.serverConfig.publicCredentialsSaveEnabled = false;
+    }
+  }
+
+  function reset() {
+    service.loadConfig(true);
+  }
+
+  async function save() {
+    if (configurationWizard) {
+      await configurationWizardService.next();
+    } else {
+      if (serverConfigResource.isChanged()) {
+        const result = await commonDialogService.open(ConfirmationDialog, {
+          title: 'administration_server_configuration_save_confirmation_title',
+          message: 'administration_server_configuration_save_confirmation_message',
+        });
+
+        if (result === DialogueStateResult.Rejected) {
+          return;
+        }
+      }
+      await service.saveConfiguration(true);
+    }
+  }
+
   return styled(style)(
-    <layout-grid as="div">
-      <layout-grid-inner as="div">
-        <layout-grid-cell as='div' {...use({ span: 12 })}>
-          {!controller.editing ? (
-            <message-box as='div'>
+    <SubmittingForm ref={focusedRef} name='server_config' onSubmit={save} onChange={handleChange}>
+      {!configurationWizard && (
+        <ToolsPanel>
+          <ToolsAction
+            title={translate('administration_configuration_tools_save_tooltip')}
+            icon="admin-save"
+            viewBox="0 0 24 24"
+            disabled={!changed}
+            onClick={save}
+          >
+            {translate('ui_processing_save')}
+          </ToolsAction>
+          <ToolsAction
+            title={translate('administration_configuration_tools_cancel_tooltip')}
+            icon="admin-cancel"
+            viewBox="0 0 24 24"
+            disabled={!changed}
+            onClick={reset}
+          >
+            {translate('ui_processing_cancel')}
+          </ToolsAction>
+        </ToolsPanel>
+      )}
+      <ColoredContainer wrap gap overflow parent>
+        {configurationWizard && (
+          <Group form>
+            <GroupItem>
               <h3>{translate('administration_configuration_wizard_configuration_title')}</h3>
+            </GroupItem>
+            <GroupItem>
               <p>{translate('administration_configuration_wizard_configuration_message')}</p>
-            </message-box>
-          ) : (
-            <AdministrationTools>
-              <IconButton name="admin-save" viewBox="0 0 28 28" onClick={controller.save} />
-              <IconButton name="admin-cancel" viewBox="0 0 28 28" onClick={controller.reset} />
-            </AdministrationTools>
+            </GroupItem>
+          </Group>
+        )}
+        <Loader state={service}>
+          {() => styled(style)(
+            <Container wrap gap>
+              <ServerConfigurationInfoForm state={service.state} />
+              <Group form gap medium>
+                <GroupTitle>{translate('administration_configuration_wizard_configuration_plugins')}</GroupTitle>
+                <ServerConfigurationConfigurationForm serverConfig={service.state.serverConfig} />
+                <ServerConfigurationNavigatorViewForm configs={service.state} />
+                <Placeholder container={service.pluginsContainer} />
+              </Group>
+              <ServerConfigurationSecurityForm serverConfig={service.state.serverConfig} />
+              <Placeholder
+                container={service.configurationContainer}
+                configurationWizard={configurationWizard}
+                state={service.state}
+              />
+            </Container>
           )}
-          <SubmittingForm ref={focusedRef} name='server_config' onSubmit={controller.save} onChange={controller.change}>
-            {service.loading ? (
-              <Loader />
-            ) : (
-              <>
-                <FormBox>
-                  <FormBoxElement>
-                    <ServerConfigurationInfoForm serverConfig={controller.state.serverConfig} />
-                    {!controller.editing && (
-                      <ServerConfigurationAdminForm serverConfig={controller.state.serverConfig} />
-                    )}
-                  </FormBoxElement>
-                  <FormBoxElement>
-                    <ServerConfigurationConfigurationForm serverConfig={controller.state.serverConfig} />
-                  </FormBoxElement>
-                </FormBox>
-              </>
-            )}
-          </SubmittingForm>
-        </layout-grid-cell>
-      </layout-grid-inner>
-    </layout-grid>
+        </Loader>
+      </ColoredContainer>
+    </SubmittingForm>
   );
 });

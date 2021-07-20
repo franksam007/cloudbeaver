@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,15 @@ import graphql.schema.DataFetchingEnvironment;
 import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.model.WebConnectionInfo;
 import io.cloudbeaver.model.session.WebSession;
+import io.cloudbeaver.server.CBApplication;
 import io.cloudbeaver.service.DBWBindingContext;
+import io.cloudbeaver.service.DBWServiceBindingServlet;
 import io.cloudbeaver.service.WebServiceBindingBase;
 import io.cloudbeaver.service.sql.impl.WebServiceSQL;
+import org.eclipse.jetty.servlet.ServletContextHandler;
+import org.eclipse.jetty.servlet.ServletHolder;
+import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.utils.CommonUtils;
 
@@ -34,7 +40,7 @@ import java.util.stream.Collectors;
 /**
  * Web service implementation
  */
-public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL> {
+public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL> implements DBWServiceBindingServlet {
 
     public WebServiceBindingSQL() {
         super(DBWServiceSQL.class, new WebServiceSQL(), "schema/service.sql.graphqls");
@@ -46,14 +52,27 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL> {
             .dataFetcher("sqlDialectInfo", env ->
                 getService(env).getDialectInfo(getSQLProcessor(env))
             )
+            .dataFetcher("sqlListContexts", env ->
+                getService(env).listContexts(getWebSession(env),
+                    env.getArgument("connectionId"),
+                    env.getArgument("contextId"))
+            )
             .dataFetcher("sqlCompletionProposals", env ->
                 getService(env).getCompletionProposals(
                     getSQLContext(env),
                     env.getArgument("query"),
                     env.getArgument("position"),
-                    env.getArgument("maxResults")
+                    env.getArgument("maxResults"),
+                    env.getArgument("simpleMode")
                 )
-            );
+            )
+            .dataFetcher("sqlSupportedOperations", env ->
+                getService(env).getSupportedOperations(
+                    getSQLContext(env),
+                    env.getArgument("resultsId"),
+                    env.getArgument("attributeIndex"))
+            )
+        ;
 
         model.getMutationType()
             .dataFetcher("sqlContextCreate", env -> getService(env).createContext(
@@ -69,23 +88,11 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL> {
                     return true;
             })
 
-            .dataFetcher("sqlExecuteQuery", env ->
-                getService(env).executeQuery(
-                    getSQLContext(env),
-                    env.getArgument("sql"),
-                    getDataFilter(env),
-                    getDataFormat(env)))
             .dataFetcher("sqlResultClose", env ->
                 getService(env).closeResult(
                     getSQLContext(env),
                     env.getArgument("resultId")))
 
-            .dataFetcher("readDataFromContainer", env ->
-                getService(env).readDataFromContainer(
-                    getSQLContext(env),
-                    env.getArgument("containerNodePath"),
-                    getDataFilter(env),
-                    getDataFormat(env)))
             .dataFetcher("updateResultsData", env ->
                 getService(env).updateResultsData(
                     getSQLContext(env),
@@ -108,29 +115,65 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL> {
                     getDataFilter(env),
                     getDataFormat(env)
                 ))
+            .dataFetcher("asyncReadDataFromContainer", env ->
+                getService(env).asyncReadDataFromContainer(
+                    getSQLContext(env),
+                    env.getArgument("containerNodePath"),
+                    getDataFilter(env),
+                    getDataFormat(env)
+                ))
             .dataFetcher("asyncSqlExecuteResults", env ->
                 getService(env).asyncGetQueryResults(
+                    getWebSession(env), env.getArgument("taskId")
+                ))
+            .dataFetcher("asyncSqlExplainExecutionPlan", env ->
+                getService(env).asyncSqlExplainExecutionPlan(
+                    getSQLContext(env),
+                    env.getArgument("query"),
+                    env.getArgument("configuration")
+                ))
+            .dataFetcher("asyncSqlExplainExecutionPlanResult", env ->
+                getService(env).asyncSqlExplainExecutionPlanResult(
                     getWebSession(env), env.getArgument("taskId")
                 ));
     }
 
+    @NotNull
     private WebDataFormat getDataFormat(DataFetchingEnvironment env) {
         String dataFormat = env.getArgument("dataFormat");
         return CommonUtils.valueOf(WebDataFormat.class, dataFormat, WebDataFormat.resultset);
     }
 
+    @NotNull
     public static WebSQLConfiguration getSQLConfiguration(WebSession webSession) {
         return webSession.getAttribute("sqlConfiguration", cfg -> new WebSQLConfiguration(), WebSQLConfiguration::dispose);
     }
 
+    @NotNull
     public static WebSQLProcessor getSQLProcessor(DataFetchingEnvironment env) throws DBWebException {
         WebConnectionInfo connectionInfo = getWebConnection(env);
+        return getSQLProcessor(connectionInfo);
+    }
+
+    @NotNull
+    public static WebSQLProcessor getSQLProcessor(WebConnectionInfo connectionInfo) throws DBWebException {
         return getSQLConfiguration(connectionInfo.getSession()).getSQLProcessor(connectionInfo);
     }
 
+    @Nullable
+    public static WebSQLProcessor getSQLProcessor(WebConnectionInfo connectionInfo, boolean connect) throws DBWebException {
+        return getSQLConfiguration(connectionInfo.getSession()).getSQLProcessor(connectionInfo, connect);
+    }
+
+    @NotNull
     public static WebSQLContextInfo getSQLContext(DataFetchingEnvironment env) throws DBWebException {
         WebSQLProcessor processor = getSQLProcessor(env);
         String contextId = env.getArgument("contextId");
+        return getSQLContext(processor, contextId);
+    }
+
+    @NotNull
+    public static WebSQLContextInfo getSQLContext(WebSQLProcessor processor, String contextId) throws DBWebException {
         WebSQLContextInfo context = processor.getContext(contextId);
         if (context == null) {
             throw new DBWebException("SQL context '" + contextId + "' not found");
@@ -138,11 +181,25 @@ public class WebServiceBindingSQL extends WebServiceBindingBase<DBWServiceSQL> {
         return context;
     }
 
+    @Override
+    public void addServlets(CBApplication application, ServletContextHandler servletContextHandler) {
+        servletContextHandler.addServlet(
+            new ServletHolder("sqlResultValueViewer", new WebSQLResultServlet(application, getServiceImpl())),
+            application.getServicesURI() + "sql-result-value/*");
+    }
+
     private static class WebSQLConfiguration {
         private final Map<WebConnectionInfo, WebSQLProcessor> processors = new HashMap<>();
 
         WebSQLProcessor getSQLProcessor(WebConnectionInfo connectionInfo) throws DBWebException {
+            return WebServiceBindingSQL.getSQLProcessor(connectionInfo, true);
+        }
+
+        WebSQLProcessor getSQLProcessor(WebConnectionInfo connectionInfo, boolean connect) throws DBWebException {
             if (connectionInfo.getDataSource() == null) {
+                if (!connect) {
+                    return null;
+                }
                 try {
                     connectionInfo.getDataSourceContainer().connect(connectionInfo.getSession().getProgressMonitor(), true, false);
                 } catch (DBException e) {

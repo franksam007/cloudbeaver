@@ -1,14 +1,13 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { computed, observable } from 'mobx';
+import { computed, observable, makeObservable } from 'mobx';
 
-import { AppAuthService } from '@cloudbeaver/core-authentication';
 import {
   ConnectionInfoResource,
   ConnectionsManagerService,
@@ -17,11 +16,12 @@ import {
   isConnectionProvider, IConnectionProvider,
   isConnectionSetter, IConnectionSetter
 } from '@cloudbeaver/core-connections';
-import { injectable } from '@cloudbeaver/core-di';
+import { Bootstrap, injectable } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
 import { ExtensionUtils, IExtension } from '@cloudbeaver/core-extensions';
+import { SessionDataResource } from '@cloudbeaver/core-root';
 
-import { ITab } from '../../shared/NavigationTabs/ITab';
+import type { ITab } from '../../shared/NavigationTabs/ITab';
 import { NavigationTabsService } from '../../shared/NavigationTabs/NavigationTabsService';
 import { IObjectCatalogProvider, isObjectCatalogProvider } from '../../shared/NodesManager/extensions/IObjectCatalogProvider';
 import { IObjectCatalogSetter, isObjectCatalogSetter } from '../../shared/NodesManager/extensions/IObjectCatalogSetter';
@@ -45,7 +45,7 @@ interface IActiveItem<T> {
 }
 
 @injectable()
-export class ConnectionSchemaManagerService {
+export class ConnectionSchemaManagerService extends Bootstrap {
   get currentConnectionId(): string | null | undefined {
     if (!this.activeItem?.getCurrentConnectionId) {
       return null;
@@ -67,7 +67,7 @@ export class ConnectionSchemaManagerService {
     return this.activeItem.getCurrentSchemaId(this.activeItem.context);
   }
 
-  @computed get currentObjectCatalog(): ObjectContainer | undefined {
+  get currentObjectCatalog(): ObjectContainer | undefined {
     if (!this.currentConnectionId || !this.currentObjectCatalogId) {
       return;
     }
@@ -78,7 +78,7 @@ export class ConnectionSchemaManagerService {
     );
   }
 
-  @computed get currentObjectSchema(): ObjectContainer | undefined {
+  get currentObjectSchema(): ObjectContainer | undefined {
     if (!this.currentConnectionId || !this.currentObjectSchemaId || !this.currentObjectCatalogId) {
       return;
     }
@@ -90,7 +90,7 @@ export class ConnectionSchemaManagerService {
     );
   }
 
-  @computed get objectContainerList(): ObjectContainer[] | undefined {
+  get objectContainerList(): ObjectContainer[] | undefined {
     if (!this.currentConnectionId) {
       return;
     }
@@ -116,8 +116,8 @@ export class ConnectionSchemaManagerService {
       && !this.connectionsManagerService.connectionObjectContainers.isLoading();
   }
 
-  @observable private activeItem: IActiveItem<any> | null = null;
-  @observable private activeItemHistory: Array<IActiveItem<any>> = [];
+  private activeItem: IActiveItem<any> | null = null;
+  private activeItemHistory: Array<IActiveItem<any>> = [];
 
   constructor(
     private navigationTabsService: NavigationTabsService,
@@ -125,19 +125,30 @@ export class ConnectionSchemaManagerService {
     private connectionsManagerService: ConnectionsManagerService,
     private dbDriverResource: DBDriverResource,
     private notificationService: NotificationService,
-    private appAuthService: AppAuthService
+    private sessionDataResource: SessionDataResource
   ) {
+    super();
+    makeObservable<ConnectionSchemaManagerService, 'activeItem' | 'activeItemHistory'>(this, {
+      currentObjectCatalog: computed,
+      currentObjectSchema: computed,
+      objectContainerList: computed,
+      activeItem: observable,
+      activeItemHistory: observable,
+    });
   }
 
-  registerCallbacks(): void {
+  register(): void {
+    this.sessionDataResource.onDataUpdate
+      .addHandler(this.reset.bind(this));
+
     this.navigationTabsService.onTabSelect
       .subscribe(this.onTabSelect.bind(this));
 
     this.navigationTabsService.onTabClose
       .subscribe(this.onTabClose.bind(this));
-
-    this.appAuthService.auth.addHandler(() => this.reset());
   }
+
+  load(): void {}
 
   /**
    * Trigger when user select connection in dropdown

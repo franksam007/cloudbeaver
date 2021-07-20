@@ -1,28 +1,21 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 
 import { TreeNode } from '@cloudbeaver/core-blocks';
 
-import { NavNode } from '../../shared/NodesManager/EntityTypes';
+import type { NavigationNodeComponent } from '../NavigationNodeComponent';
 import { NavigationNodeControl } from './NavigationNode/NavigationNodeControl';
 import { NavigationNodeNested } from './NavigationNode/NavigationNodeNested';
 import { useNavigationNode } from './useNavigationNode';
 
-interface Props {
-  node: NavNode;
-  component: React.FC<{
-    nodeId: string;
-  }>;
-}
-
-export const NavigationNode: React.FC<Props> = observer(function NavigationNode({
+export const NavigationNode: NavigationNodeComponent = observer(function NavigationNode({
   node,
   component,
 }) {
@@ -35,6 +28,8 @@ export const NavigationNode: React.FC<Props> = observer(function NavigationNode(
     handleExpand,
     handleOpen,
     handleSelect,
+    handleFilter,
+    filterValue,
   } = useNavigationNode(node);
 
   const Control = control || NavigationNodeControl;
@@ -45,12 +40,14 @@ export const NavigationNode: React.FC<Props> = observer(function NavigationNode(
       selected={selected}
       expanded={expanded}
       leaf={leaf}
+      filterValue={filterValue}
       onExpand={handleExpand}
       onOpen={handleOpen}
       onSelect={handleSelect}
+      onFilter={handleFilter}
     >
       <Control node={node} />
-      <NavigationNodeNested nodeId={node.id} component={component} />
+      {expanded && <NavigationNodeNested nodeId={node.id} component={component} />}
     </TreeNode>
   );
 });

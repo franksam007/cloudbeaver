@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { IServiceInjector, PluginManifest } from '@cloudbeaver/core-di';
+import type { PluginManifest } from '@cloudbeaver/core-di';
 
 import { LocaleService } from './LocaleService';
 import { DBObjectPageService } from './ObjectPage/DBObjectPageService';
@@ -22,6 +22,7 @@ export const manifest: PluginManifest = {
   info: { name: 'Object Viewer Plugin' },
 
   providers: [
+    ObjectViewerBootstrap,
     ObjectPropertiesPageService,
     ObjectFoldersService,
     ObjectViewerTabService,
@@ -31,11 +32,4 @@ export const manifest: PluginManifest = {
     DBObjectPageService,
     LocaleService,
   ],
-
-  async initialize(injector: IServiceInjector) {
-    injector
-      .resolveServiceByClass(ObjectViewerBootstrap)
-      .bootstrap();
-  },
-
 };

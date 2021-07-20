@@ -1,21 +1,20 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import styled from 'reshadow';
 import { css } from 'reshadow';
 
-import { AdminUser } from '@cloudbeaver/core-authentication';
-import { StaticImage } from '@cloudbeaver/core-blocks';
+import { AUTH_PROVIDER_LOCAL_ID } from '@cloudbeaver/core-authentication';
+import { PlaceholderComponent, StaticImage } from '@cloudbeaver/core-blocks';
+import type { ObjectOrigin } from '@cloudbeaver/core-sdk';
 
-interface Props {
-  context: AdminUser;
-}
+import type { IUserDetailsInfoProps } from '../../UsersAdministrationService';
 
 const USER_DETAILS_STYLES = css`
   StaticImage {
@@ -24,12 +23,26 @@ const USER_DETAILS_STYLES = css`
   }
 `;
 
-export const Origin: React.FC<Props> = observer(function Origin({ context }) {
-  const isLocal = context.origin.type === 'local';
-  const icon = isLocal ? '/icons/local_connection.svg' : context.origin.icon;
-  const title = isLocal ? 'Local user' : context.origin.displayName;
+interface IOriginIconProps {
+  origin: ObjectOrigin;
+}
+
+export const OriginIcon: React.FC<IOriginIconProps> = observer(function Origin({ origin }) {
+  const isLocal = origin.type === AUTH_PROVIDER_LOCAL_ID;
+  const icon = isLocal ? '/icons/local_connection.svg' : origin.icon;
+  const title = isLocal ? 'Local user' : origin.displayName;
 
   return styled(USER_DETAILS_STYLES)(
-    <StaticImage icon={icon} title={title} />
+    <StaticImage key={origin.type + origin.subType} icon={icon} title={title} />
+  );
+});
+
+export const Origin: PlaceholderComponent<IUserDetailsInfoProps> = observer(function Origin({ user }) {
+  return (
+    <>
+      {user.origins.map(origin => (
+        <OriginIcon key={origin.type + origin.subType} origin={origin} />
+      ))}
+    </>
   );
 });

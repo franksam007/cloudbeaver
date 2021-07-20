@@ -1,12 +1,12 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import {
   useLayoutEffect, useCallback, useState, useRef, useContext
 } from 'react';
@@ -20,8 +20,8 @@ import styled, { css, use } from 'reshadow';
 
 import { useStyles, composes } from '@cloudbeaver/core-theming';
 
+import { Icon } from '../Icon';
 import { IconButton } from '../IconButton';
-import { Icon } from '../Icons/Icon';
 import { baseFormControlStyles } from './baseFormControlStyles';
 import { FormContext } from './FormContext';
 
@@ -70,12 +70,8 @@ const styles = composes(
       height: 16px;
       display: block;
     }
-    MenuButton Icon {
-      transform: rotate(90deg);
-
-      &[|focus] {
-        transform: rotate(-90deg);
-      }
+    MenuButton Icon[|focus] {
+      transform: rotate(180deg);
     }
     input-box {
       flex: 1;
@@ -127,6 +123,7 @@ export const Combobox: ComboboxType = observer(function Combobox({
   propertyName,
   items,
   children,
+  title,
   className,
   mod,
   long,
@@ -147,7 +144,15 @@ export const Combobox: ComboboxType = observer(function Combobox({
     gutter: 4,
   });
   const [searchValue, setSearchValue] = useState('');
-  const value = state ? state[name] : controlledValue;
+  let value: string | number | readonly string[] | undefined = controlledValue;
+
+  if (state) {
+    if (name in state) {
+      value = state[name];
+    } else if (rest.defaultValue !== undefined) {
+      value = rest.defaultValue;
+    }
+  }
 
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,7 +173,7 @@ export const Combobox: ComboboxType = observer(function Combobox({
         onSelect(null, name, value);
       }
       if (context) {
-        context.onChange(null, name);
+        context.change(null, name);
       }
       setSearchValue('');
     },
@@ -186,7 +191,7 @@ export const Combobox: ComboboxType = observer(function Combobox({
         onSelect(id, name, value);
       }
       if (context) {
-        context.onChange(id, name);
+        context.change(id, name);
       }
     },
     [value, state, name, menu, context, onSelect]
@@ -205,11 +210,12 @@ export const Combobox: ComboboxType = observer(function Combobox({
 
   return styled(useStyles(baseFormControlStyles, styles))(
     <field as="div" className={className} {...use({ long })}>
-      <field-label as='label'>{children}</field-label>
+      <field-label title={title} as='label'>{children}</field-label>
       <input-box as="div">
         <input
           ref={ref}
           name={name}
+          title={title}
           value={selectedItem ? valueSelector(selectedItem) : searchValue}
           readOnly={!!selectedItem || readOnly}
           onChange={handleChange}

@@ -1,39 +1,34 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import {
-  NavNodeManagerService,
-  INodeNavigationData,
-  ITab,
-  NodeManagerUtils
-} from '@cloudbeaver/core-app';
+import { NavNodeManagerService, INodeNavigationData, ITab } from '@cloudbeaver/core-app';
 import { injectable } from '@cloudbeaver/core-di';
 import { NotificationService } from '@cloudbeaver/core-events';
-import { IExecutionContextProvider } from '@cloudbeaver/core-executor';
-import {
-  DBObjectPageService, ObjectPage, ObjectViewerTabService, IObjectViewerTabState
-} from '@cloudbeaver/plugin-object-viewer';
+import type { IExecutionContextProvider } from '@cloudbeaver/core-executor';
+import { DBObjectPageService, ObjectPage, ObjectViewerTabService, IObjectViewerTabState } from '@cloudbeaver/plugin-object-viewer';
 
+import { DataPresentationService } from './DataPresentationService';
 import { DataViewerPanel } from './DataViewerPage/DataViewerPanel';
 import { DataViewerTab } from './DataViewerPage/DataViewerTab';
 import { DataViewerTableService } from './DataViewerTableService';
-import { IDataViewerPageState } from './IDataViewerPageState';
+import type { IDataViewerPageState } from './IDataViewerPageState';
 
 @injectable()
 export class DataViewerTabService {
-  page: ObjectPage<IDataViewerPageState>;
+  readonly page: ObjectPage<IDataViewerPageState>;
 
   constructor(
     private navNodeManagerService: NavNodeManagerService,
     private dataViewerTableService: DataViewerTableService,
     private objectViewerTabService: ObjectViewerTabService,
     private dbObjectPageService: DBObjectPageService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private dataPresentationService: DataPresentationService,
   ) {
     this.page = this.dbObjectPageService.register({
       key: 'data_viewer_data',
@@ -68,15 +63,20 @@ export class DataViewerTabService {
       if (tabInfo.isNewlyCreated) {
         trySwitchPage(this.page);
       }
-      // if (nodeInfo.childrenId === '') {
-      //   tabInfo.trySwitchHandler(this.tabHandler);
-      // }
     } catch (exception) {
       this.notificationService.logException(exception, 'Data Viewer Error', 'Error in Data Viewer while processing action with database node');
     }
   }
 
   private async handleTabSelect(tab: ITab<IObjectViewerTabState>) {
+    if (tab.handlerState.pageId !== this.page.key) {
+      return;
+    }
+
+    if (!tab.handlerState.connectionId) {
+      return;
+    }
+
     const node = await this.navNodeManagerService.loadNode({
       nodeId: tab.handlerState.objectId,
       parentId: tab.handlerState.parentId,
@@ -86,22 +86,36 @@ export class DataViewerTabService {
       return;
     }
 
-    if (this.dataViewerTableService.has(tab.id)) {
-      return;
+    let model = this.dataViewerTableService.get(tab.handlerState.tableId || '');
+
+    if (tab.handlerState.tableId && model && !model.source.executionContext?.context) {
+      await this.dataViewerTableService.removeTableModel(tab.handlerState.tableId);
+      model = undefined;
     }
 
-    const nodeInfo = this.navNodeManagerService
-      .getNodeContainerInfo(tab.handlerState.objectId);
+    if (!model) {
+      model = await this.dataViewerTableService.create(
+        tab.handlerState.connectionId,
+        tab.handlerState.objectId
+      );
+      tab.handlerState.tableId = model.id;
 
-    if (!nodeInfo.connectionId) {
-      return;
+      const pageState = this.page.getState(tab);
+
+      if (pageState) {
+        const presentation = this.dataPresentationService.get(pageState?.presentationId);
+
+        if (presentation?.dataFormat !== undefined) {
+          model.setDataFormat(presentation.dataFormat);
+        }
+      }
     }
 
-    await this.dataViewerTableService.create(
-      tab.id,
-      NodeManagerUtils.connectionNodeIdToConnectionId(nodeInfo.connectionId),
-      tab.handlerState.objectId
-    );
+    // TODO: used for initial data fetch, but can repeat request each time data tab is selected,
+    //       so probably should be refactored and managed by presentation
+    if (model.source.error === null && model.source.results.length === 0) {
+      model.requestData();
+    }
   }
 
   private async handleTabRestore(tab: ITab<IObjectViewerTabState>) {
@@ -109,6 +123,8 @@ export class DataViewerTabService {
   }
 
   private handleTabClose(tab: ITab<IObjectViewerTabState>) {
-    this.dataViewerTableService.removeTableModel(tab.id);
+    if (tab.handlerState.tableId) {
+      this.dataViewerTableService.removeTableModel(tab.handlerState.tableId);
+    }
   }
 }

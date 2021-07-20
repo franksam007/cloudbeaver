@@ -1,25 +1,26 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
+import { observer } from 'mobx-react-lite';
 import { useContext } from 'react';
 import styled from 'reshadow';
 
-import { DynamicStyle, useStyles } from '@cloudbeaver/core-theming';
+import { ComponentStyle, useStyles } from '@cloudbeaver/core-theming';
 
 import { TabPanel } from './TabPanel';
-import { ITabInfo } from './TabsContainer';
+import type { ITabInfo } from './TabsContainer/ITabsContainer';
 import { TabsContext } from './TabsContext';
 
 interface Props {
-  style?: DynamicStyle[] | DynamicStyle;
+  style?: ComponentStyle;
 }
 
-export const TabPanelList: React.FC<Props> = function TabPanelList({
+export const TabPanelList: React.FC<Props> = observer(function TabPanelList({
   style,
   children,
 }) {
@@ -54,4 +55,4 @@ export const TabPanelList: React.FC<Props> = function TabPanelList({
       {children}
     </>
   );
-};
+});

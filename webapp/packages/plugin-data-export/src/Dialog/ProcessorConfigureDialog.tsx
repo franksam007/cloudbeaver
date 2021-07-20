@@ -1,18 +1,18 @@
 /*
- * cloudbeaver - Cloud Database Manager
- * Copyright (C) 2020 DBeaver Corp and others
+ * CloudBeaver - Cloud Database Manager
+ * Copyright (C) 2020-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0.
  * you may not use this file except in compliance with the License.
  */
 
-import { observer } from 'mobx-react';
+import { observer } from 'mobx-react-lite';
 import styled, { css } from 'reshadow';
 
 import { IProperty, PropertiesTable, ErrorMessage } from '@cloudbeaver/core-blocks';
 import { CommonDialogWrapper } from '@cloudbeaver/core-dialogs';
 import { useTranslate } from '@cloudbeaver/core-localization';
-import { DataTransferProcessorInfo, GQLErrorCatcher } from '@cloudbeaver/core-sdk';
+import type { DataTransferProcessorInfo, GQLErrorCatcher } from '@cloudbeaver/core-sdk';
 import { composes, useStyles } from '@cloudbeaver/core-theming';
 
 import { ProcessorConfigureDialogFooter } from './ProcessorConfigureDialogFooter';
@@ -23,7 +23,7 @@ const styles = composes(
       composes: theme-ripple theme-background-secondary theme-text-on-secondary from global;
     }
     ErrorMessage {
-      composes: theme-background-secondary from global;
+      composes: theme-background-secondary theme-text-on-secondary from global;
     }
   `,
   css`
@@ -83,7 +83,6 @@ export const ProcessorConfigureDialog = observer(
             onCancel={onClose}
           />
         )}
-        noBodyPadding
         onReject={onClose}
       >
         <PropertiesTable

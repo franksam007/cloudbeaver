@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,16 @@
  */
 package io.cloudbeaver.service.sql;
 
+import org.jkiss.dbeaver.DBException;
+import org.jkiss.dbeaver.model.DBPEvaluationContext;
+import org.jkiss.dbeaver.model.DBUtils;
 import org.jkiss.dbeaver.model.data.DBDAttributeConstraint;
 import org.jkiss.dbeaver.model.data.DBDDataFilter;
 import org.jkiss.dbeaver.model.exec.DBCLogicalOperator;
+import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
+import org.jkiss.dbeaver.model.struct.DBSDataContainer;
+import org.jkiss.dbeaver.model.struct.DBSEntity;
+import org.jkiss.dbeaver.model.struct.DBSEntityAttribute;
 import org.jkiss.utils.CommonUtils;
 
 import java.util.ArrayList;
@@ -38,7 +45,7 @@ public class WebSQLDataFilter {
     private int offset;
     private int limit ;
     private String where;
-    private List<WebSQLDataFilterConstraint> constraints = new ArrayList<>();
+    private final List<WebSQLDataFilterConstraint> constraints = new ArrayList<>();
 
     public WebSQLDataFilter() {
         this.offset = 0;
@@ -85,13 +92,28 @@ public class WebSQLDataFilter {
         return constraints;
     }
 
-    public DBDDataFilter makeDataFilter() {
+    public String getWhere() {
+        return where;
+    }
+
+    public DBDDataFilter makeDataFilter(DBRProgressMonitor monitor, DBSDataContainer dataContainer) throws DBException {
         DBDDataFilter dataFilter = new DBDDataFilter();
         dataFilter.setWhere(where);
         if (!CommonUtils.isEmpty(constraints)) {
             List<DBDAttributeConstraint> dbdConstraints = new ArrayList<>();
             for (WebSQLDataFilterConstraint webConstr : constraints) {
-                DBDAttributeConstraint dbConstraint = new DBDAttributeConstraint(webConstr.getAttribute(), -1);
+                DBDAttributeConstraint dbConstraint;
+                if (dataContainer instanceof DBSEntity) {
+                    DBSEntityAttribute attribute = ((DBSEntity) dataContainer).getAttribute(monitor, webConstr.getAttribute());
+                    if (attribute == null) {
+                        throw new DBException("Attribute '" + webConstr.getAttribute() + "' not found in '" + DBUtils.getObjectFullName(dataContainer, DBPEvaluationContext.UI) + "'");
+                    }
+                    dbConstraint = new DBDAttributeConstraint(attribute, -1);
+                } else {
+                    dbConstraint = new DBDAttributeConstraint(webConstr.getAttribute(), -1);
+                }
+                dbConstraint.setPlainNameReference(true);
+
                 if (webConstr.getOrderPosition() != null) {
                     dbConstraint.setOrderPosition(webConstr.getOrderPosition());
                 }

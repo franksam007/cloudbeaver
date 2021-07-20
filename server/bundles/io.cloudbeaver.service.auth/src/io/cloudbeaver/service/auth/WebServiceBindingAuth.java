@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import io.cloudbeaver.DBWebException;
 import io.cloudbeaver.service.DBWBindingContext;
 import io.cloudbeaver.service.WebServiceBindingBase;
 import io.cloudbeaver.service.auth.impl.WebServiceAuthImpl;
+import org.jkiss.utils.CommonUtils;
 
 /**
  * Web service implementation
@@ -38,13 +39,19 @@ public class WebServiceBindingAuth extends WebServiceBindingBase<DBWServiceAuth>
             .dataFetcher("authLogin", env -> getService(env).authLogin(
                 getWebSession(env, false),
                 env.getArgument("provider"),
-                env.getArgument("credentials")))
+                env.getArgument("credentials"),
+                CommonUtils.toBoolean(env.getArgument("linkUser"))))
             .dataFetcher("authLogout", env -> {
-                getService(env).authLogout(getWebSession(env));
+                getService(env).authLogout(getWebSession(env), env.getArgument("provider"));
                 return true;
             })
-            .dataFetcher("sessionUser", env -> getService(env).sessionUser(getWebSession(env, false)))
-            .dataFetcher("authProviders", env -> getService(env).getAuthProviders(getWebSession(env)))
+            .dataFetcher("activeUser", env -> getService(env).activeUser(getWebSession(env, false)))
+            .dataFetcher("authProviders", env -> getService(env).getAuthProviders())
+            .dataFetcher("authChangeLocalPassword", env -> getService(env).changeLocalPassword(
+                getWebSession(env),
+                env.getArgument("oldPassword"),
+                env.getArgument("newPassword")
+            ))
         ;
 
     }

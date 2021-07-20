@@ -1,6 +1,6 @@
 /*
  * DBeaver - Universal Database Manager
- * Copyright (C) 2010-2020 DBeaver Corp and others
+ * Copyright (C) 2010-2021 DBeaver Corp and others
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -373,6 +373,29 @@ class CBSecurityController implements DBWSecurityController {
         }
     }
 
+    @Override
+    public String[] getUserLinkedProviders(String userId) throws DBCException {
+        try (Connection dbCon = database.openConnection()) {
+            try (PreparedStatement dbStat = dbCon.prepareStatement(
+                "SELECT DISTINCT PROVIDER_ID FROM CB_USER_CREDENTIALS\n" +
+                    "WHERE USER_ID=?")) {
+                dbStat.setString(1, userId);
+
+                try (ResultSet dbResult = dbStat.executeQuery()) {
+                    List<String> providerIds = new ArrayList<>();
+
+                    while (dbResult.next()) {
+                        providerIds.add(dbResult.getString(1));
+                    }
+
+                    return providerIds.toArray(new String[0]);
+                }
+            }
+        } catch (SQLException e) {
+            throw new DBCException("Error saving role in database", e);
+        }
+    }
+
     ///////////////////////////////////////////
     // Roles
 
@@ -437,6 +460,28 @@ class CBSecurityController implements DBWSecurityController {
             }
         } catch (SQLException e) {
             throw new DBCException("Error saving role in database", e);
+        }
+    }
+
+    @Override
+    public void updateRole(WebRole role) throws DBCException {
+        if (!isSubjectExists(role.getRoleId())) {
+            throw new DBCException("Role '" + role.getRoleId() + "' doesn't exists");
+        }
+        try (Connection dbCon = database.openConnection()) {
+            try (JDBCTransaction txn = new JDBCTransaction(dbCon)) {
+                createAuthSubject(dbCon, role.getRoleId(), SUBJECT_ROLE);
+                try (PreparedStatement dbStat = dbCon.prepareStatement(
+                    "UPDATE CB_ROLE SET ROLE_NAME=?,ROLE_DESCRIPTION=? WHERE ROLE_ID=?")) {
+                    dbStat.setString(1, CommonUtils.notEmpty(role.getName()));
+                    dbStat.setString(2, CommonUtils.notEmpty(role.getDescription()));
+                    dbStat.setString(3, role.getRoleId());
+                    dbStat.execute();
+                }
+                txn.commit();
+            }
+        } catch (SQLException e) {
+            throw new DBCException("Error updating role info in database", e);
         }
     }
 

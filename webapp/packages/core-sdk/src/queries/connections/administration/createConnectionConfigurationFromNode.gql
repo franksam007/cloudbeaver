@@ -1,5 +1,13 @@
-query createConnectionConfigurationFromNode($nodePath: String!) {
-  connection: copyConnectionConfiguration(nodePath: $nodePath) {
-    ...AdminConnection
+query createConnectionConfigurationFromNode(
+  $nodePath: String!, 
+  $config: ConnectionConfig,
+
+  $includeOrigin: Boolean!,
+  $customIncludeOriginDetails: Boolean!,
+  $includeAuthProperties: Boolean!,
+  $customIncludeNetworkHandlerCredentials: Boolean!
+) {
+  connection: copyConnectionConfiguration(nodePath: $nodePath, config: $config) {
+    ...DatabaseConnection
   }
 }

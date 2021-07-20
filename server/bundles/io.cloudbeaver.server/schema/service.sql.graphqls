@@ -3,29 +3,31 @@
 ####################################################
 
 type SQLDialectInfo {
-    name: String
+    name: String!
 
-    dataTypes: [ String ]
-    functions: [ String ]
-    reservedWords: [ String ]
-    quoteStrings: [ [ String ] ]
-    singleLineComments: [ String ]
-    multiLineComments: [ [ String ] ]
+    dataTypes: [ String ]!
+    functions: [ String ]!
+    reservedWords: [ String ]!
+    quoteStrings: [ [ String ] ]!
+    singleLineComments: [ String ]!
+    multiLineComments: [ [ String ] ]!
 
     catalogSeparator: String
     structSeparator: String
     scriptDelimiter: String
 
+    supportsExplainExecutionPlan: Boolean!
+
 }
 
 type SQLCompletionProposal {
-    displayString: String
-    type: String
+    displayString: String!
+    type: String!
     score: Int
 
-    replacementString: String
-    replacementOffset: Int
-    replacementLength: Int
+    replacementString: String!
+    replacementOffset: Int!
+    replacementLength: Int!
     cursorPosition: Int
 
     icon: String
@@ -40,6 +42,7 @@ type SQLCompletionProposal {
 type SQLContextInfo {
 
     id: ID!
+    connectionId: ID!
     defaultCatalog: String
     defaultSchema: String
 
@@ -80,8 +83,13 @@ type SQLResultColumn {
     scale: Int
     precision: Int
 
+    required: Boolean!
+
     readOnly: Boolean!
     readOnlyStatus: String
+
+    # Operations supported for this attribute
+    supportedOperations: [DataTypeLogicalOperation!]!
 }
 
 type DatabaseDocument {
@@ -112,8 +120,13 @@ type SQLQueryResults {
 
 type SQLExecuteInfo {
 
+    # Status message
     statusMessage: String
-    duration: Int
+    # Execute time (ms)
+    duration: Int!
+    # Actual conditions applied to query
+    filterText: String
+    # Results
     results: [ SQLQueryResults! ]!
 }
 
@@ -122,20 +135,59 @@ input SQLResultRow {
     updateValues: Object
 }
 
+type DataTypeLogicalOperation {
+    id: ID!
+    expression: String!
+    argumentCount: Int
+}
+
+####################################################
+# SQL Executio plan
+####################################################
+
+type SQLExecutionPlan {
+    query: String!
+    nodes: [SQLExecutionPlanNode!]!
+}
+
+type SQLExecutionPlanNode {
+    id: ID!
+    parentId: ID
+
+    kind: String!
+    name: String
+    type: String!
+    condition: String
+    description: String
+    properties: [ObjectPropertyInfo!]!
+}
+
+####################################################
+# Query and Mutation
+####################################################
+
 extend type Query {
 
     sqlDialectInfo( connectionId: ID! ): SQLDialectInfo
 
-    sqlListContexts( connectionId: ID! ): [ SQLContextInfo ]
+    # Lists SQL contexts for a connection (optional) or returns the particular context info
+    sqlListContexts( connectionId: ID, contextId: ID ): [ SQLContextInfo ]!
 
     sqlCompletionProposals(
         connectionId: ID!,
         contextId: ID!,
         query: String!,
         position: Int!,
-        maxResults: Int
+        maxResults: Int,
+        simpleMode: Boolean
     ): [ SQLCompletionProposal ]
 
+    sqlSupportedOperations(
+        connectionId: ID!,
+        contextId: ID!,
+        resultsId: ID!,
+        attributeIndex: Int!
+    ): [DataTypeLogicalOperation!]!
 }
 
 extend type Mutation {
@@ -145,34 +197,39 @@ extend type Mutation {
 
     sqlContextDestroy( connectionId: ID!, contextId: ID! ): Boolean!
 
-    sqlExecuteQuery(
+    # Execute SQL and return results
+    asyncSqlExecuteQuery(
         connectionId: ID!,
         contextId: ID!,
         sql: String!,
         filter: SQLDataFilter,
-        dataFormat: ResultDataFormat
-    ): SQLExecuteInfo
+        dataFormat: ResultDataFormat    # requested data format. May be ignored by server
+    ): AsyncTaskInfo!
 
-    sqlResultClose(connectionId: ID!, contextId: ID!, resultId: ID!): Boolean!
-
-    readDataFromContainer(
+    # Read data from table
+    asyncReadDataFromContainer(
         connectionId: ID!,
         contextId: ID!,
         containerNodePath: ID!,
         filter: SQLDataFilter,
         dataFormat: ResultDataFormat
-    ): SQLExecuteInfo
+    ): AsyncTaskInfo!
 
+    # Close results (free resources)
+    sqlResultClose(connectionId: ID!, contextId: ID!, resultId: ID!): Boolean!
+
+    # Update single cell value
     updateResultsData(
         connectionId: ID!,
         contextId: ID!,
         resultsId: ID!,
-
+        # Row cell values (to identify row)
         updateRow: [ Object ]!,
-        # Map<Int,Object>
+        # Values to update - Map<Int,Object>
         updateValues: Object
     ): SQLExecuteInfo
 
+    # Update multiple cell values
     updateResultsDataBatch(
         connectionId: ID!,
         contextId: ID!,
@@ -183,17 +240,19 @@ extend type Mutation {
         addedRows: [ SQLResultRow! ],
     ): SQLExecuteInfo
 
-    ### Async API
-
     # Returns SQLExecuteInfo
-    asyncSqlExecuteQuery(
+    asyncSqlExecuteResults(taskId: ID!): SQLExecuteInfo !
+
+
+    # Read data from table
+    asyncSqlExplainExecutionPlan(
         connectionId: ID!,
         contextId: ID!,
-        sql: String!,
-        filter: SQLDataFilter,
-        dataFormat: ResultDataFormat    # requested data format. May be ignored by server
+        query: String!,
+        configuration: Object!
     ): AsyncTaskInfo!
 
-    asyncSqlExecuteResults(taskId: ID!): SQLExecuteInfo !
+    # Returns SQLExecutionPlan
+    asyncSqlExplainExecutionPlanResult(taskId: ID!): SQLExecutionPlan !
 
 }
